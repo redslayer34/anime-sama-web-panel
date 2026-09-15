@@ -693,6 +693,15 @@ select option { background: var(--surface); color: var(--text) }
 .resume-banner svg { width: 17px; height: 17px; color: var(--accent); flex: none }
 .resume-banner span:first-of-type { flex: 1; min-width: 0 }
 
+/* Bannière d'indexation : même habillage que la reprise de lecture, mais
+   détachée du lecteur, donc avec ses propres bordures arrondies. */
+.index-banner {
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.spinner-sm { width: 16px; height: 16px; border-width: 2px }
+
 .player-bar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 12px 16px;

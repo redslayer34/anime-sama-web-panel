@@ -28,8 +28,13 @@ const CATALOGUE_MAX = 3_000_000;        // ne pas persister un catalogue trop lo
 const HISTORY_MAX   = 120;
 const SAVE_EVERY    = 5000;             // fréquence d'enregistrement de la position
 
+const LOCAL_BACKEND = "http://127.0.0.1:5000";
+
 const DEFAULT_SETTINGS = {
-  api: "http://127.0.0.1:5000",
+  // Vide = même origine que la page, ce que fournit serve.py aussi bien en local
+  // qu'en ligne. Pointer par défaut vers 127.0.0.1 ferait interroger son propre
+  // PC à tout visiteur d'un panel hébergé.
+  api: "",
   timeout: 45,
   theme: "dark",
   accent: "violet",
@@ -385,7 +390,11 @@ async function request(path, { signal, timeoutMs } = {}) {
     response = await fetch(url, {
       signal: controller.signal,
       mode: "cors",
-      credentials: "omit",
+      // « same-origin » et non « omit » : quand le panel est servi derrière un
+      // mot de passe, le navigateur doit rejoindre l'authentification à nos
+      // propres appels /api, sinon tout repart en 401. Un backend externe
+      // renseigné à la main reste, lui, interrogé sans identifiants.
+      credentials: "same-origin",
       cache: "no-store",
       headers: { Accept: "application/json" },
     });
@@ -843,6 +852,7 @@ async function runSearch(query) {
     discover.message = describeError(err);
     renderDiscover();
     if (!(err instanceof ApiError && err.kind === "abort")) setApiStatus("offline");
+    pollIndexing();
   }
 }
 
@@ -888,7 +898,9 @@ async function fetchCatalogue() {
     discover.message = describeError(err);
     renderDiscover();
     setApiStatus("offline");
-    offerIndexing();
+    const state = await fetchPanelState();
+    if (state?.indexing) pollIndexing();     // le serveur s'en charge déjà
+    else offerIndexing();
   }
 }
 
@@ -940,6 +952,54 @@ $("#loadCatalogueBtn").addEventListener("click", () => {
     ],
   });
 });
+
+/* ── Indexation du catalogue côté serveur ──
+   En hébergement, le disque est effacé à chaque redémarrage : le serveur
+   réindexe alors en tâche de fond. Sans ce retour visuel, la première visite
+   après un réveil ressemble à une panne. La route /panel/state n'existe que
+   si le panel est servi par serve.py ; ailleurs, on s'efface silencieusement. */
+const indexBanner = $("#indexBanner");
+const indexText = $("#indexText");
+const indexing = { timer: 0, seen: false, available: true };
+
+async function fetchPanelState() {
+  if (!indexing.available || location.protocol === "file:") return null;
+  try {
+    const response = await fetch(new URL("panel/state", location.href), { cache: "no-store" });
+    if (!response.ok) { indexing.available = false; return null; }
+    return await response.json();
+  } catch {
+    indexing.available = false;
+    return null;
+  }
+}
+
+async function pollIndexing() {
+  clearTimeout(indexing.timer);
+  indexing.timer = 0;
+
+  const state = await fetchPanelState();
+  if (!state) { indexBanner.hidden = true; return; }
+
+  if (state.indexing) {
+    indexing.seen = true;
+    indexText.textContent = "Indexation du catalogue en cours : 3 à 5 minutes après le réveil du serveur. La recherche fonctionnera ensuite.";
+    indexBanner.hidden = false;
+    setApiStatus("indexing");
+    indexing.timer = setTimeout(pollIndexing, 5000);
+    return;
+  }
+
+  indexBanner.hidden = true;
+  if (indexing.seen) {
+    indexing.seen = false;
+    setApiStatus(state.backend ? "online" : "offline");
+    notify("Le catalogue est prêt, la recherche est de nouveau disponible.", { type: "success", title: "Indexation terminée" });
+    if (discover.origin !== "results") fetchCatalogue();
+  } else if (state.error) {
+    notify(`L'indexation du catalogue a échoué côté serveur : ${state.error}`, { type: "error", title: "Catalogue indisponible", timeout: 10000 });
+  }
+}
 
 async function showAnimeDetails(anime) {
   const body = el("div", {}, [el("p", { text: "Chargement des saisons…" })]);
@@ -1753,11 +1813,18 @@ const apiStatusDot   = $("#apiStatusDot");
 const apiStatusLabel = $("#apiStatusLabel");
 const apiDiag        = $("#apiDiag");
 
+const STATUS_LABELS = {
+  online: "API OK", offline: "API KO", demo: "Démo",
+  pending: "Test…", indexing: "Indexation…", unknown: "API ?",
+};
+
 function setApiStatus(status) {
   if (!status) return;
-  const labels = { online: "API OK", offline: "API KO", demo: "Démo", pending: "Test…", unknown: "API ?" };
-  apiStatusDot.dataset.state = status;
-  apiStatusLabel.textContent = labels[status] || labels.unknown;
+  // Tant que le serveur indexe, l'état du catalogue prime sur celui de la
+  // connexion : afficher « API OK » ferait croire que la recherche est prête.
+  if (indexing.seen && status !== "indexing") return;
+  apiStatusDot.dataset.state = status === "indexing" ? "pending" : status;
+  apiStatusLabel.textContent = STATUS_LABELS[status] || STATUS_LABELS.unknown;
 }
 
 function applyAppearance() {
@@ -2055,6 +2122,30 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 /* ─────────────────────────────────────────────
    10d. Démarrage
    ───────────────────────────────────────────── */
+/** Sans réglage explicite, on teste la même origine puis le backend local. */
+async function autoDiscoverBackend() {
+  if (state.settings.demo || apiBase()) return;
+  try {
+    await source.ping();
+    setApiStatus("online");
+    return;                                   // servi par serve.py : rien à faire
+  } catch { /* on tente le backend local ci-dessous */ }
+
+  if (location.protocol === "https:") { setApiStatus("offline"); return; }
+  const previous = state.settings.api;
+  state.settings.api = LOCAL_BACKEND;
+  try {
+    await source.ping();
+    $("#apiInput").value = LOCAL_BACKEND;
+    persist();
+    setApiStatus("online");
+    notify(`Backend trouvé sur ${LOCAL_BACKEND}.`, { type: "success", timeout: 4000 });
+  } catch {
+    state.settings.api = previous;
+    setApiStatus("offline");
+  }
+}
+
 function init() {
   loadState();
   applyAppearance();
@@ -2076,7 +2167,7 @@ function init() {
   applyView(location.hash.slice(1) || "discover");
 
   if (state.settings.demo) setApiStatus("demo");
-  else checkApi({ silent: true });
+  else { autoDiscoverBackend(); pollIndexing(); }
 
   if (location.protocol === "file:") {
     notify("Panel ouvert en file:// — la plupart des navigateurs bloquent alors les requêtes vers l'API. Sers le dossier avec « python -m http.server 8080 ».",

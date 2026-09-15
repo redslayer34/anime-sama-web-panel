@@ -96,7 +96,66 @@ CORS(app)            # `app` = l'instance Flask d'AnimeSamaApi
 
 ---
 
-## 2. Ce qui fonctionne vraiment
+## 2. Mettre le panel en ligne (une seule URL)
+
+Pour y accéder depuis n'importe quel ordinateur, sans rien lancer : le dépôt contient une
+image Docker qui embarque **le panel et le backend ensemble**. Une seule origine, donc ni
+CORS ni contenu mixte, et le champ « URL du backend » reste vide.
+
+### Déployer sur Render (gratuit, sans carte bancaire)
+
+1. **Fork** ce dépôt sur ton compte GitHub.
+2. Sur [render.com](https://render.com), connecte ton compte GitHub, puis
+   **New → Blueprint** et choisis le dépôt. Render lit `render.yaml` tout seul.
+3. Il demande la valeur de **`PANEL_PASSWORD`** : choisis un mot de passe. C'est la seule
+   chose à saisir. L'identifiant est `panel` (modifiable avec la variable `PANEL_USER`).
+4. Attends la fin du build, puis ouvre l'URL fournie. Le navigateur demande le mot de
+   passe, puis le panel s'affiche.
+
+### Au premier démarrage
+
+Le catalogue est construit pendant le build quand c'est possible. Sinon, le serveur
+l'indexe en tâche de fond au démarrage et le panel affiche une bannière
+« Indexation du catalogue en cours » : compte 3 à 5 minutes, puis la recherche fonctionne.
+Rien à cliquer.
+
+### Vérifier tout de suite si ça marche vraiment
+
+**Paramètres → Tester la connexion.** Deux lignes avec `✔` : c'est bon. Si le test échoue
+ou que les épisodes ne se chargent jamais, c'est très probablement Cloudflare (voir
+ci-dessous) — inutile de chercher ailleurs.
+
+### Variables d'environnement
+
+| Variable | Rôle |
+|---|---|
+| `PANEL_PASSWORD` | Mot de passe d'accès. Vide = site ouvert à tous. |
+| `PANEL_USER` | Identifiant, `panel` par défaut. |
+| `PANEL_AUTO_INDEX` | `1` pour indexer au démarrage si le catalogue est vide. |
+| `PORT` | Fourni par l'hébergeur ; le panel s'y adapte seul. |
+
+### Les deux limites à connaître avant de déployer
+
+**Cloudflare peut bloquer le serveur.** AnimeSamaApi passe par `cloudscraper`, qui
+fonctionne bien depuis une connexion domestique mais beaucoup moins depuis un datacenter,
+dont les plages d'adresses sont souvent filtrées par défaut. C'est le seul vrai risque
+d'échec, et il ne se tranche qu'en essayant. Particularité à connaître : le backend
+résout le domaine actif d'Anime-Sama **dès son import**, donc s'il est bloqué il ne
+démarre même pas — le panel reste servi, mais les appels API renvoient une erreur claire.
+
+*Si c'est bloqué :* garde le panel en ligne et fais tourner le backend chez toi, exposé en
+HTTPS par un [tunnel Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)
+(`cloudflared tunnel --url http://localhost:5000`). Colle l'URL obtenue dans
+Paramètres → URL du backend. Contrainte : ton PC doit être allumé.
+
+**Mise en veille.** Sur l'offre gratuite de Render, le service s'endort après une quinzaine
+de minutes sans visite et met environ 50 secondes à se réveiller. Un ping régulier
+l'éviterait, mais consommerait la quasi-totalité des 750 heures mensuelles gratuites — à
+toi de voir.
+
+---
+
+## 3. Ce qui fonctionne vraiment
 
 ### Sans backend, immédiatement
 
@@ -139,14 +198,19 @@ prétend pas les fournir.
 
 ---
 
-## 3. Structure du projet
+## 4. Structure du projet
 
 ```
 index.html      Structure sémantique, sprite SVG, modale <dialog>, zone de notifications
 style.css       Design system : variables CSS, 3 thèmes, 5 accents, responsive, animations
 script.js       Toute la logique, en sections numérotées (utilitaires, stockage, API,
                 toasts/modales, navigation, découverte, lecteur, favoris, scans, réglages)
-serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api
+serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api,
+                gère le mot de passe et l'indexation de fond
+Dockerfile      Image « panel + backend » pour l'hébergement
+render.yaml     Blueprint Render (plan gratuit, health check, mot de passe)
+docker/         Point d'entrée du backend en conteneur, contrôle des dépendances
+                et indexation au build
 lancer.py       Raccourci double-clic universel (utile si les .bat sont bloqués)
 lancer.bat      Raccourci double-clic Windows
 lancer.command  Raccourci double-clic macOS
@@ -162,7 +226,7 @@ du `<script>` par `hls.min.js`.
 
 ---
 
-## 4. Raccourcis clavier
+## 5. Raccourcis clavier
 
 | Touche | Action |
 |---|---|
@@ -178,7 +242,7 @@ du `<script>` par `hls.min.js`.
 
 ---
 
-## 5. Limites connues (côté navigateur, pas côté panel)
+## 6. Limites connues (côté navigateur, pas côté panel)
 
 - **Hébergeurs vidéo.** `getAnimeLink` renvoie tantôt un fichier direct (MP4 / M3U8),
   tantôt une page de lecteur (Sibnet, Vidmoly, SendVid…). Les fichiers directs sont lus
@@ -197,7 +261,7 @@ du `<script>` par `hls.min.js`.
 
 ---
 
-## 6. En cas de problème au démarrage
+## 7. En cas de problème au démarrage
 
 **`PermissionError: [WinError 10013]`** — le port est réservé par Windows (Hyper-V, WSL
 ou Docker s'en attribuent des plages entières, même sans rien écouter dessus). Le
@@ -221,7 +285,7 @@ démarrera tout seul au prochain lancement.
 
 ---
 
-## 7. Vie privée et usage
+## 8. Vie privée et usage
 
 Aucune donnée ne quitte ton navigateur : ni compte, ni télémétrie, ni requête vers un
 service tiers autre que le CDN de hls.js. Favoris, historique et progression vivent dans

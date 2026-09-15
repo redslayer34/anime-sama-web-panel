@@ -1,0 +1,9 @@
+.git
+.github
+legacy
+docker/README*
+*.md
+!README.md
+__pycache__
+*.py[cod]
+shots

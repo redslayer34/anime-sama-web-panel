@@ -138,6 +138,12 @@
         <span class="chip" id="resultCount" aria-live="polite">—</span>
       </div>
 
+      <div class="resume-banner index-banner" id="indexBanner" hidden>
+        <svg aria-hidden="true"><use href="#i-refresh"/></svg>
+        <span id="indexText">Indexation du catalogue en cours…</span>
+        <span class="spinner spinner-sm" aria-hidden="true"></span>
+      </div>
+
       <div class="card-grid" id="discoverResults"></div>
     </section>
 
@@ -326,7 +332,7 @@
           <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-plug"/></svg> Connexion à l'API</h2>
           <div class="field-group">
             <label for="apiInput">URL du backend AnimeSamaApi</label>
-            <input id="apiInput" type="url" inputmode="url" spellcheck="false" placeholder="http://127.0.0.1:5000">
+            <input id="apiInput" type="url" inputmode="url" spellcheck="false" placeholder="(vide = même origine que cette page)">
             <p class="hint">Laisse ce champ <strong>vide</strong> si tu lances le panel avec <code>serve.py</code> : l'API est alors relayée sur la même origine et le CORS ne se pose plus. Sinon, le backend doit autoriser le CORS (voir le README).</p>
           </div>
           <div class="field-group">

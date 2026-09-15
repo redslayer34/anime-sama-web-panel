@@ -25,7 +25,9 @@ Bibliothèque standard uniquement : aucune dépendance à installer.
 """
 
 import argparse
+import base64
 import errno
+import hmac
 import json
 import os
 import signal
@@ -77,7 +79,7 @@ def detect_backend():
     return None
 
 
-def find_backend_dir(explicit=None):
+def find_backend_dir(explicit=None, entry="main.py"):
     """Localise le dossier d'AnimeSamaApi : chemin donné, dossier voisin, ou home."""
     candidates = []
     if explicit:
@@ -86,18 +88,23 @@ def find_backend_dir(explicit=None):
         candidates += [ROOT / name, ROOT.parent / name, Path.home() / name]
     for path in candidates:
         try:
-            if (path / "main.py").is_file():
+            if (path / entry).is_file():
                 return path.resolve()
         except OSError:
             continue
     return None
 
 
-def start_backend(directory, wait=90):
-    """Démarre `python main.py` dans le dossier donné et attend sa réponse."""
-    say(f"Démarrage du backend depuis {directory}")
+def start_backend(directory, entry="main.py", wait=90):
+    """Démarre le backend dans le dossier donné et attend qu'il réponde.
+
+    `entry` existe pour les conteneurs : le main.py d'AnimeSamaApi lance `git
+    fetch`, puis `input()` si git est absent — ce qui bloque sans entrée
+    standard — et démarre Flask en mode debug avec rechargeur. L'image Docker
+    fournit donc son propre point d'entrée."""
+    say(f"Démarrage du backend depuis {directory} ({entry})")
     try:
-        process = subprocess.Popen([sys.executable, "main.py"], cwd=str(directory))
+        process = subprocess.Popen([sys.executable, entry], cwd=str(directory))
     except Exception as err:
         say(f"  Échec du démarrage : {err}")
         return None, None
@@ -106,7 +113,11 @@ def start_backend(directory, wait=90):
     while time.time() < deadline:
         if process.poll() is not None:
             say(f"  Le backend s'est arrêté immédiatement (code {process.returncode}).")
-            say("  Vérifie ses dépendances : pip install -r requirements.txt")
+            say("  Causes habituelles :")
+            say("  • dépendances non installées (pip install -r requirements.txt) ;")
+            say("  • anime-sama.pw injoignable — AnimeSamaApi résout le domaine actif")
+            say("    dès l'import, et s'arrête si aucun ne répond (réseau filtré,")
+            say("    ou Cloudflare qui bloque l'adresse IP du serveur).")
             return None, None
         base = detect_backend()
         if base:
@@ -133,9 +144,9 @@ def resolve_backend(args):
         say(f"Backend détecté sur {base}")
         return base, None
 
-    directory = find_backend_dir(args.backend)
+    directory = find_backend_dir(args.backend, args.backend_entry)
     if directory:
-        return start_backend(directory)
+        return start_backend(directory, args.backend_entry)
 
     say("Aucun backend trouvé sur les ports 5000-5002, et aucun dossier AnimeSamaApi repéré.")
     say("  → Le panel démarre quand même : le mode démo (Paramètres → Lecture) fonctionne sans backend.")
@@ -152,6 +163,80 @@ def is_api_call(path):
     return path.startswith(PROXY_PREFIXES) or path.startswith("/?")
 
 
+# ─────────────────────────────────────────────
+#  Accès protégé (déploiement public)
+# ─────────────────────────────────────────────
+PANEL_USER = os.environ.get("PANEL_USER", "panel")
+
+
+def password():
+    return os.environ.get("PANEL_PASSWORD", "").strip()
+
+
+def credentials_ok(header):
+    """Compare l'en-tête Authorization au mot de passe attendu, en temps constant."""
+    if not header or not header.lower().startswith("basic "):
+        return False
+    try:
+        decoded = base64.b64decode(header.split(None, 1)[1].strip()).decode("utf-8")
+    except Exception:
+        return False
+    user, _, given = decoded.partition(":")
+    # Les deux comparaisons sont évaluées : pas de court-circuit sur le nom.
+    return bool(hmac.compare_digest(user, PANEL_USER)
+                & hmac.compare_digest(given, password()))
+
+
+# ─────────────────────────────────────────────
+#  Indexation du catalogue, en tâche de fond
+# ─────────────────────────────────────────────
+class Indexing:
+    """Le proxy d'un hébergeur coupe les requêtes longues : l'indexation, qui dure
+    3 à 5 minutes, tourne donc ici plutôt que déclenchée par une requête HTTP."""
+    running = False
+    done_at = None
+    error = None
+
+    @classmethod
+    def catalogue_size(cls, base):
+        """Nombre de fiches en base, ou None si le backend ne répond pas."""
+        try:
+            with urllib.request.urlopen(f"{base}/api/loadBaseAnimeData", timeout=30) as response:
+                data = json.loads(response.read() or b"null")
+            return len(data) if isinstance(data, list) else 0
+        except Exception:
+            return None
+
+    @classmethod
+    def start_if_needed(cls, base):
+        if cls.running or not base:
+            return
+        size = cls.catalogue_size(base)
+        if size is None:
+            return                                   # backend muet : on ne force rien
+        if size > 0:
+            say(f"Catalogue déjà indexé : {size} fiches.")
+            return
+        cls.running = True
+        say("Catalogue vide : indexation lancée en tâche de fond (3 à 5 minutes).")
+        threading.Thread(target=cls._work, args=(base,), daemon=True).start()
+
+    @classmethod
+    def _work(cls, base):
+        try:
+            with urllib.request.urlopen(f"{base}/api/getAllAnime?r=True", timeout=1800):
+                pass
+            size = cls.catalogue_size(base) or 0
+            cls.error = None if size else "l'indexation n'a produit aucune fiche"
+            say(f"Indexation terminée : {size} fiches.")
+        except Exception as err:
+            cls.error = str(err)
+            say(f"Indexation échouée : {err}")
+        finally:
+            cls.running = False
+            cls.done_at = time.time()
+
+
 class PanelHandler(SimpleHTTPRequestHandler):
     api_base = None          # renseigné par serve()
     timeout = 600
@@ -165,10 +250,49 @@ class PanelHandler(SimpleHTTPRequestHandler):
             sys.stderr.write("  %s\n" % (fmt % args))
 
     def do_GET(self):
-        self.proxy() if is_api_call(self.path) else super().do_GET()
+        self.route(body=True)
 
     def do_HEAD(self):
-        self.proxy(body=False) if is_api_call(self.path) else super().do_HEAD()
+        self.route(body=False)
+
+    def route(self, body):
+        path = self.path.split("?")[0]
+
+        # Exempté d'authentification : l'hébergeur doit pouvoir sonder le service
+        # sans identifiants, sinon il le déclare en échec et le redéploie en boucle.
+        if path == "/healthz":
+            return self.send_payload(200, b'{"ok": true}', body=body)
+
+        if not self.authorized():
+            return
+        if path == "/panel/state":
+            return self.send_state(body)
+        if is_api_call(self.path):
+            return self.proxy(body=body)
+        super().do_GET() if body else super().do_HEAD()
+
+    def authorized(self):
+        if not password():
+            return True
+        if credentials_ok(self.headers.get("Authorization")):
+            return True
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Panel Anime-Sama", charset="UTF-8"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return False
+
+    def send_state(self, body=True):
+        """État du service, pour la bannière d'indexation du panel."""
+        base = PanelHandler.api_base or detect_backend()
+        payload = json.dumps({
+            "backend": bool(base),
+            "indexing": Indexing.running,
+            "error": Indexing.error,
+            "protected": bool(password()),
+        }).encode()
+        self.send_payload(200, payload, body=body)
 
     def proxy(self, body=True):
         if not PanelHandler.api_base:
@@ -221,8 +345,19 @@ def port_unavailable(err):
             or getattr(err, "errno", None) in PORT_BUSY_ERRNOS)
 
 
-def bind(host, port, span=20):
-    """Premier port utilisable à partir de celui demandé."""
+def bind(host, port, span=20, strict=False):
+    """Premier port utilisable à partir de celui demandé.
+
+    `strict` sert à l'hébergement : quand la plateforme impose le port via $PORT,
+    en changer rendrait le service injoignable sans message d'erreur lisible."""
+    if strict:
+        try:
+            return ThreadingHTTPServer((host, port), PanelHandler), port
+        except OSError as err:
+            raise SystemExit(
+                f"Le port {port} imposé par $PORT n'a pas pu être ouvert : {err}\n"
+                "L'hébergeur attend le service sur ce port précis ; en changer le "
+                "rendrait injoignable.")
     blocked = []
     for candidate in range(port, port + span):
         try:
@@ -250,14 +385,20 @@ def bind(host, port, span=20):
 def main():
     parser = argparse.ArgumentParser(
         description="Lance le panel Anime-Sama et, si besoin, le backend AnimeSamaApi.")
-    parser.add_argument("--port", type=int, default=8080, help="port du panel (défaut : 8080)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8080),
+                        help="port du panel (défaut : $PORT si défini, sinon 8080)")
     parser.add_argument("--host", default="127.0.0.1", help="interface d'écoute (défaut : 127.0.0.1)")
     parser.add_argument("--api", default=None, help="URL du backend (désactive la détection)")
     parser.add_argument("--backend", default=None, help="dossier d'AnimeSamaApi à démarrer")
+    parser.add_argument("--backend-entry", default="main.py",
+                        help="script du backend à exécuter (défaut : main.py)")
     parser.add_argument("--no-backend", action="store_true", help="ne pas chercher de backend")
     parser.add_argument("--no-open", action="store_true", help="ne pas ouvrir le navigateur")
     parser.add_argument("--timeout", type=int, default=600, help="délai maximal d'un appel API, en secondes")
     parser.add_argument("--verbose", action="store_true", help="journaliser chaque requête")
+    parser.add_argument("--auto-index", action="store_true",
+                        default=os.environ.get("PANEL_AUTO_INDEX", "").strip() not in ("", "0", "false"),
+                        help="indexer le catalogue au démarrage s'il est vide (défaut : $PANEL_AUTO_INDEX)")
     args = parser.parse_args()
 
     if not (ROOT / "index.html").is_file():
@@ -271,14 +412,22 @@ def main():
     PanelHandler.timeout = args.timeout
     PanelHandler.quiet = not args.verbose
 
-    server, port = bind(args.host, args.port)
+    # $PORT défini et non contredit par --port : la plateforme impose ce port.
+    imposed = bool(os.environ.get("PORT")) and args.port == int(os.environ.get("PORT") or 0)
+    server, port = bind(args.host, args.port, strict=imposed)
     url = f"http://{args.host}:{port}/"
 
     say("─" * 46)
     say(f"Panel   : {url}")
     say(f"Backend : {api_base or 'aucun pour le moment (mode démo utilisable)'}")
+    say(f"Accès   : {'protégé par mot de passe' if password() else 'libre (aucun mot de passe)'}")
     say("Ctrl+C pour tout arrêter.")
     say()
+
+    if args.auto_index:
+        # En tâche de fond : la sonde du catalogue ne doit pas retarder l'écoute,
+        # que l'hébergeur surveille via /healthz dès les premières secondes.
+        threading.Thread(target=Indexing.start_if_needed, args=(api_base,), daemon=True).start()
 
     if not args.no_open:
         threading.Timer(0.6, lambda: _open(url)).start()

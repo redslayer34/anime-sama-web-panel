@@ -1,0 +1,20 @@
+# Blueprint Render : https://render.com/docs/blueprint-spec
+# Déploiement : Render → New → Blueprint → choisir ce dépôt.
+services:
+  - type: web
+    name: anime-sama-panel
+    runtime: docker          # comptes plus anciens : remplacer par « env: docker »
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      # Demandé au déploiement et jamais stocké dans le dépôt.
+      # Identifiant par défaut : « panel ».
+      - key: PANEL_PASSWORD
+        sync: false
+      # Réindexe le catalogue au démarrage s'il est vide (disque effacé à
+      # chaque redémarrage sur l'offre gratuite).
+      - key: PANEL_AUTO_INDEX
+        value: "1"
