@@ -18,8 +18,23 @@ qu'il affiche vient du backend que tu fais tourner toi-même.
 python3 serve.py
 ```
 
-Sous Windows, tu peux simplement **double-cliquer sur `lancer.bat`** ; sur macOS,
-`lancer.command` ; sur Linux, `lancer.sh`.
+Ou en double-cliquant, selon ton système :
+
+| Système | Fichier à double-cliquer |
+|---|---|
+| Windows | `lancer.bat` |
+| Windows où les `.bat` sont bloqués (PC d'école, d'entreprise) | **`lancer.py`** |
+| macOS | `lancer.command` |
+| Linux | `lancer.sh` |
+
+`lancer.py` fait exactement la même chose que `lancer.bat` : Windows associe les fichiers
+`.py` à Python, donc le double-clic fonctionne même quand les scripts `.bat`, `.cmd` et
+`.ps1` sont interdits par une stratégie de sécurité. Sinon, ouvre le dossier dans
+l'Explorateur, tape `cmd` dans la barre d'adresse, Entrée, puis :
+
+```
+python serve.py
+```
 
 Ce lanceur fait tout seul :
 
@@ -132,6 +147,7 @@ style.css       Design system : variables CSS, 3 thèmes, 5 accents, responsive,
 script.js       Toute la logique, en sections numérotées (utilitaires, stockage, API,
                 toasts/modales, navigation, découverte, lecteur, favoris, scans, réglages)
 serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api
+lancer.py       Raccourci double-clic universel (utile si les .bat sont bloqués)
 lancer.bat      Raccourci double-clic Windows
 lancer.command  Raccourci double-clic macOS
 lancer.sh       Raccourci Linux
@@ -181,7 +197,31 @@ du `<script>` par `hls.min.js`.
 
 ---
 
-## 6. Vie privée et usage
+## 6. En cas de problème au démarrage
+
+**`PermissionError: [WinError 10013]`** — le port est réservé par Windows (Hyper-V, WSL
+ou Docker s'en attribuent des plages entières, même sans rien écouter dessus). Le
+lanceur essaie les ports suivants puis en demande un au système, donc ce message ne
+devrait plus bloquer. Pour voir les plages réservées :
+
+```
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+**La fenêtre se ferme instantanément** — lance depuis un terminal (`python serve.py`)
+pour lire le message. Depuis un double-clic, le lanceur marque une pause sur erreur.
+
+**« Aucun backend trouvé »** — normal si tu n'as pas encore installé AnimeSamaApi. Le
+panel fonctionne quand même en mode démo (Paramètres → Lecture). Pour les vraies
+données, place le dossier `AnimeSamaApi` à côté du panel : le lanceur le trouvera et le
+démarrera tout seul au prochain lancement.
+
+**`python` n'est pas reconnu** — installe Python depuis
+[python.org](https://www.python.org/downloads/) en cochant **« Add Python to PATH »**.
+
+---
+
+## 7. Vie privée et usage
 
 Aucune donnée ne quitte ton navigateur : ni compte, ni télémétrie, ni requête vers un
 service tiers autre que le CDN de hls.js. Favoris, historique et progression vivent dans

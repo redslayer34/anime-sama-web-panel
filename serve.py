@@ -25,6 +25,7 @@ Bibliothèque standard uniquement : aucune dépendance à installer.
 """
 
 import argparse
+import errno
 import json
 import os
 import signal
@@ -33,6 +34,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -95,12 +97,7 @@ def start_backend(directory, wait=90):
     """Démarre `python main.py` dans le dossier donné et attend sa réponse."""
     say(f"Démarrage du backend depuis {directory}")
     try:
-        process = subprocess.Popen(
-            [sys.executable, "main.py"],
-            cwd=str(directory),
-            stdout=subprocess.DEVNULL if os.name == "nt" else None,
-            stderr=subprocess.STDOUT if os.name == "nt" else None,
-        )
+        process = subprocess.Popen([sys.executable, "main.py"], cwd=str(directory))
     except Exception as err:
         say(f"  Échec du démarrage : {err}")
         return None, None
@@ -210,15 +207,44 @@ class PanelHandler(SimpleHTTPRequestHandler):
             self.wfile.write(payload)
 
 
+# EADDRINUSE et EACCES, sous leurs différentes formes selon la plateforme.
+# Sous Windows, WinError 10013 ne veut pas dire « interdit » au sens des droits :
+# le port tombe le plus souvent dans une plage réservée par Hyper-V, WSL ou
+# Docker, alors même que personne ne l'écoute. Il faut donc simplement essayer
+# le suivant, et non abandonner.
+PORT_BUSY_ERRNOS = {errno.EADDRINUSE, errno.EACCES, 48, 98, 10013, 10048}
+PORT_BUSY_WINERRORS = {10013, 10048}
+
+
+def port_unavailable(err):
+    return (getattr(err, "winerror", None) in PORT_BUSY_WINERRORS
+            or getattr(err, "errno", None) in PORT_BUSY_ERRNOS)
+
+
 def bind(host, port, span=20):
-    """Premier port libre à partir de celui demandé."""
+    """Premier port utilisable à partir de celui demandé."""
+    blocked = []
     for candidate in range(port, port + span):
         try:
             return ThreadingHTTPServer((host, candidate), PanelHandler), candidate
         except OSError as err:
-            if getattr(err, "errno", None) not in (48, 98, 10048):   # déjà utilisé
+            if not port_unavailable(err):
                 raise
-    raise SystemExit(f"Aucun port libre entre {port} et {port + span - 1}.")
+            blocked.append(candidate)
+
+    # Dernier recours : laisser le système attribuer un port libre. C'est ce qui
+    # sauve les machines où toute la plage est réservée.
+    say(f"Ports {blocked[0]}-{blocked[-1]} indisponibles ; le système en choisit un.")
+    if os.name == "nt":
+        say("  (pour voir les plages réservées sous Windows :")
+        say("   netsh interface ipv4 show excludedportrange protocol=tcp)")
+    try:
+        server = ThreadingHTTPServer((host, 0), PanelHandler)
+        return server, server.server_address[1]
+    except OSError as err:
+        raise SystemExit(
+            f"Impossible d'ouvrir un port sur {host} : {err}\n"
+            "Un pare-feu ou une stratégie de sécurité bloque peut-être l'écoute réseau locale.")
 
 
 def main():
@@ -298,7 +324,7 @@ def stop_child(process):
         return
     say("Arrêt du backend…")
     try:
-        process.send_signal(signal.CTRL_BREAK_EVENT if os.name == "nt" else signal.SIGTERM)
+        process.terminate() if os.name == "nt" else process.send_signal(signal.SIGTERM)
         process.wait(timeout=8)
     except Exception:
         try:
@@ -307,5 +333,38 @@ def stop_child(process):
             pass
 
 
+def pause_if_needed():
+    """Double-clic sous Windows : sans cette pause, la fenêtre se referme
+    instantanément et le message d'erreur est illisible."""
+    if os.name != "nt":
+        return
+    try:
+        input("\nAppuie sur Entrée pour fermer cette fenêtre.")
+    except Exception:
+        pass
+
+
+def run():
+    """Point d'entrée tolérant : garde la fenêtre ouverte en cas d'erreur, ce qui
+    compte quand le script est lancé par un double-clic plutôt qu'un terminal."""
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    except SystemExit as stop:
+        if isinstance(stop.code, str):          # message d'erreur explicite
+            say()
+            say(stop.code)
+            pause_if_needed()
+            sys.exit(1)
+        raise
+    except Exception:
+        say()
+        traceback.print_exc()
+        say("\nErreur inattendue. Copie le message ci-dessus pour signaler le problème.")
+        pause_if_needed()
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    run()
