@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anime Web Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+:root{
+  --bg:#070b14;--panel:#101728;--panel2:#151e32;--line:#26314b;
+  --text:#eef3ff;--muted:#94a2c3;--a:#7659ff;--b:#18c6a4;--danger:#ff6f86;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 15% 0,#1d2752 0,#070b14 48%,#04060b 100%);
+color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{padding:24px 28px 8px;max-width:1250px;margin:auto}
+h1{margin:0;font-size:clamp(28px,4vw,44px);letter-spacing:-.035em}
+.sub{color:var(--muted);margin-top:7px}
+.layout{max-width:1250px;margin:18px auto;padding:0 28px;display:grid;grid-template-columns:330px 1fr;gap:18px}
+.card{background:rgba(16,23,40,.94);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:0 18px 55px rgba(0,0,0,.35)}
+.label{font-size:12px;color:var(--muted);margin:12px 0 6px;display:block}
+input,select{width:100%;background:#0b1120;border:1px solid var(--line);color:var(--text);border-radius:11px;padding:11px 12px;outline:none}
+input:focus,select:focus{border-color:#8067ff;box-shadow:0 0 0 3px rgba(118,89,255,.14)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{border:0;border-radius:11px;padding:11px 13px;color:#fff;background:#26324e;font-weight:750;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+.primary{background:linear-gradient(135deg,#7659ff,#597aff)}
+.green{background:linear-gradient(135deg,#129d84,#18c6a4)}
+.danger{background:#442132;color:#ffc0cb}
+.ghost{background:transparent;border:1px solid var(--line)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.status{min-height:20px;margin-top:10px;color:#b8c5df;font-size:13px;line-height:1.45}
+.sectionTitle{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:#aab6d2;font-weight:800;margin-bottom:10px}
+.playerCard{padding:0;overflow:hidden}
+.playerTop{padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;background:#0d1425;border-bottom:1px solid var(--line)}
+.now{font-weight:800}
+.now small{display:block;font-weight:500;color:var(--muted);margin-top:3px}
+.playerBox{background:#000;aspect-ratio:16/9;min-height:320px;display:flex;align-items:center;justify-content:center}
+video{width:100%;height:100%;display:block;background:#000}
+iframe{width:100%;height:100%;border:0;background:#000}
+#placeholder{color:#7582a2;text-align:center;padding:35px}
+.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px;background:#0d1425;border-top:1px solid var(--line)}
+.history{max-height:260px;overflow:auto;display:grid;gap:7px;margin-top:12px}
+.item{padding:9px 10px;background:#0b1120;border:1px solid var(--line);border-radius:10px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.item strong{font-size:13px;display:block}
+.item small{color:var(--muted)}
+.item button{padding:7px 9px;font-size:11px;white-space:nowrap}
+.help{font-size:12px;color:#8190b2;line-height:1.5;margin-top:12px}
+.badge{font-size:10px;padding:4px 7px;border-radius:999px;background:#232d48;color:#cbd5ee}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.playerBox{min-height:240px}}
+@media(max-width:520px){header{padding:18px 16px 6px}.layout{padding:0 16px}.controls,.actions,.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 Anime Web Player</h1>
+  <div class="sub">Choisis ton anime, sa saison et son épisode : la page récupère la source puis lance le lecteur directement dans le navigateur.</div>
+</header>
+
+<main class="layout">
+  <aside class="card">
+    <div class="sectionTitle">Configuration</div>
+
+    <label class="label" for="api">API / backend</label>
+    <input id="api" value="http://127.0.0.1:5000">
+
+    <label class="label" for="site">Source</label>
+    <select id="site">
+      <option value="animeSama">Anime-Sama</option>
+      <option value="voiranime">VoirAnime</option>
+      <option value="custom">Backend personnalisé</option>
+    </select>
+
+    <label class="label" for="search">Rechercher un anime</label>
+    <input id="search" placeholder="Ex. One Piece" autocomplete="off">
+    <div style="margin-top:8px"><button id="searchBtn" class="primary" style="width:100%">🔎 Rechercher</button></div>
+
+    <label class="label" for="anime">Anime</label>
+    <select id="anime"><option value="">Recherche en cours…</option></select>
+
+    <div class="grid2">
+      <div>
+        <label class="label" for="season">Saison</label>
+        <select id="season"></select>
+      </div>
+      <div>
+        <label class="label" for="episode">Épisode</label>
+        <select id="episode"></select>
+      </div>
+    </div>
+
+    <label class="label" for="version">Version</label>
+    <select id="version">
+      <option value="vostfr">VOSTFR</option>
+      <option value="vf">VF</option>
+      <option value="vastfr">VASTFR</option>
+    </select>
+
+    <label class="label" for="source">Lecteur / source</label>
+    <select id="source">
+      <option value="auto">Automatique</option>
+      <option value="video">Vidéo directe (MP4/HLS)</option>
+      <option value="iframe">Page du lecteur (iframe)</option>
+    </select>
+
+    <div class="actions">
+      <button id="playBtn" class="green">▶ Lancer</button>
+      <button id="resumeBtn" class="ghost">↩ Reprendre</button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="help">
+      Pour le mode automatique, le backend doit fournir un lien de lecture. La page accepte les sources <b>MP4</b>, <b>M3U8/HLS</b> et les pages de lecteur. Le navigateur peut bloquer certaines sources externes à cause du CORS ou du <i>referrer policy</i>.
+    </div>
+
+    <div style="margin-top:18px">
+      <div class="sectionTitle">Dernières lectures</div>
+      <div id="history" class="history"></div>
+      <button id="clearBtn" class="danger" style="width:100%;margin-top:9px">Effacer l’historique</button>
+    </div>
+  </aside>
+
+  <section class="card playerCard">
+    <div class="playerTop">
+      <div>
+        <div id="now" class="now">Aucun épisode chargé</div>
+        <small id="nowMeta"></small>
+      </div>
+      <span id="formatBadge" class="badge">EN ATTENTE</span>
+    </div>
+    <div id="playerBox" class="playerBox">
+      <div id="placeholder">
+        <div style="font-size:42px">▶</div>
+        <div style="margin-top:8px">Sélectionne un épisode puis clique sur <b>Lancer</b>.</div>
+      </div>
+      <video id="video" controls playsinline hidden></video>
+      <iframe id="frame" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen hidden></iframe>
+    </div>
+    <div class="controls">
+      <button id="prevBtn">⏮ Épisode précédent</button>
+      <button id="nextBtn">Épisode suivant ⏭</button>
+      <button id="openBtn" class="ghost">↗ Ouvrir la source</button>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const KEY = "animeWebPlayer.v3";
+  const S = load();
+
+  let catalogue = [];
+  let currentSource = "";
+  let currentHls = null;
+
+  const $ = id => document.getElementById(id);
+
+  function load(){
+    try { return JSON.parse(localStorage.getItem(KEY)) || {progress:{}, history:[], prefs:{}}; }
+    catch { return {progress:{}, history:[], prefs:{}}; }
+  }
+  function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
+
+  function setStatus(text, error=false){
+    $("status").textContent = text;
+    $("status").style.color = error ? "#ffacba" : "#b8c5df";
+  }
+
+  async function api(path){
+    const base = $("api").value.trim().replace(/\/+$/,"");
+    const url = base + path;
+    const r = await fetch(url);
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  function esc(x){
+    return String(x ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function populateAnime(items){
+    catalogue = Array.isArray(items) ? items : [];
+    $("anime").innerHTML = catalogue.length
+      ? catalogue.map((x,i)=>`<option value="${i}">${esc(x.title || x.name || x.matchedTitle || "Anime")}</option>`).join("")
+      : `<option value="">Aucun résultat</option>`;
+    if(catalogue.length) loadSeasons();
+  }
+
+  async function search(){
+    const q = $("search").value.trim();
+    if(!q) return setStatus("Écris le nom d’un anime.", true);
+
+    try{
+      setStatus("Recherche…");
+      const result = await api(`/api/getSerchAnime?q=${encodeURIComponent(q)}&l=20`);
+      populateAnime(result);
+      setStatus(`${catalogue.length} résultat(s).`);
+    }catch(e){
+      setStatus("Impossible de joindre le backend. Vérifie l’URL et le serveur API.", true);
+    }
+  }
+
+  async function loadSeasons(){
+    const item = catalogue[Number($("anime").value)];
+    if(!item) return;
+
+    try{
+      setStatus("Chargement des saisons…");
+      const title = item.title || item.name || item.matchedTitle;
+      const result = await api(`/api/getInfoAnime?q=${encodeURIComponent(title)}`);
+
+      $("season").innerHTML = (Array.isArray(result) && result.length)
+        ? result.map((x,i)=>`<option value="${esc(x.Saison || `Saison ${i+1}`)}" data-url="${esc(x.url || "")}">${esc(x.Saison || `Saison ${i+1}`)}</option>`).join("")
+        : `<option value="Saison 1">Saison 1</option>`;
+
+      await loadEpisodes();
+      setStatus("");
+    }catch(e){
+      $("season").innerHTML = `<option value="Saison 1">Saison 1</option>`;
+      await loadEpisodes();
+      setStatus("Les saisons n’ont pas pu être récupérées automatiquement.", true);
+    }
+  }
+
+  async function loadEpisodes(){
+    $("episode").innerHTML = Array.from({length:1},(_,i)=>`<option value="${i+1}">Épisode ${i+1}</option>`).join("");
+
+    // getAnimeLink renvoie les épisodes disponibles. On l'interroge pour obtenir
+    // le nombre réel d'épisodes quand le backend le permet.
+    const item = catalogue[Number($("anime").value)];
+    if(!item) return;
+    const title = item.title || item.name || item.matchedTitle;
+    const seasonText = $("season").selectedOptions[0]?.textContent || "Saison 1";
+    const match = seasonText.match(/(\d+)/);
+    const season = match ? match[1] : "1";
+
+    try{
+      const data = await api(`/api/getAnimeLink?n=${encodeURIComponent(title)}&s=saison${season}&v=${encodeURIComponent($("version").value)}`);
+      const arr = Array.isArray(data) ? data : [];
+      const nums = arr.map(x => Number(x.episode)).filter(Number.isFinite);
+      const max = nums.length ? Math.max(...nums, 1) : 1;
+      $("episode").innerHTML = Array.from({length:max},(_,i)=>`<option value="${i+1}">Épisode ${i+1}</option>`).join("");
+    }catch{
+      // On laisse au minimum l'épisode 1.
+    }
+
+    restoreProgress();
+  }
+
+  function title(){
+    return catalogue[Number($("anime").value)]?.title ||
+           catalogue[Number($("anime").value)]?.name ||
+           catalogue[Number($("anime").value)]?.matchedTitle || "";
+  }
+
+  function progressKey(){
+    return `${title()}|${$("season").selectedOptions[0]?.textContent || "Saison 1"}|${$("version").value}`;
+  }
+
+  function restoreProgress(){
+    const p = S.progress[progressKey()];
+    if(!p) return;
+    const opt = [...$("episode").options].find(o=>Number(o.value)===Number(p.episode));
+    if(opt) $("episode").value = p.episode;
+  }
+
+  function saveProgress(){
+    const k = progressKey();
+    S.progress[k] = {
+      title:title(),
+      season:$("season").selectedOptions[0]?.textContent || "Saison 1",
+      episode:Number($("episode").value),
+      version:$("version").value,
+      savedAt:new Date().toISOString()
+    };
+    save();
+  }
+
+  function rememberSource(){
+    const item = {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      title:title(),
+      season:$("season").selectedOptions[0]?.textContent || "Saison 1",
+      episode:Number($("episode").value),
+      version:$("version").value,
+      site:$("site").value,
+      source:currentSource,
+      at:new Date().toISOString()
+    };
+    S.history = [item, ...S.history.filter(x =>
+      !(x.title===item.title && x.season===item.season && x.episode===item.episode && x.version===item.version)
+    )].slice(0,50);
+    save();
+    renderHistory();
+  }
+
+  async function getEpisodeSource(){
+    const item = catalogue[Number($("anime").value)];
+    if(!item) throw new Error("Aucun anime sélectionné.");
+
+    const name = title();
+    const seasonText = $("season").selectedOptions[0]?.textContent || "Saison 1";
+    const m = seasonText.match(/(\d+)/);
+    const season = m ? m[1] : "1";
+    const ep = Number($("episode").value);
+    const version = $("version").value;
+
+    // Backend AnimeSamaApi : récupère les sources disponibles de la saison.
+    const links = await api(`/api/getAnimeLink?n=${encodeURIComponent(name)}&s=saison${season}&v=${encodeURIComponent(version)}`);
+    const arr = Array.isArray(links) ? links : [];
+
+    const found = arr.find(x => Number(x.episode) === ep) ||
+                  arr.find(x => Number(x.episode) === ep-1) ||
+                  arr.find(x => Number(x.episode) === ep+1);
+
+    if(!found || !found.url) throw new Error("Source introuvable pour cet épisode.");
+    return found.url;
+  }
+
+  async function play(){
+    const requested = $("source").value;
+    try{
+      saveProgress();
+      setStatus("Recherche de la source…");
+      const url = await getEpisodeSource();
+      currentSource = url;
+      rememberSource();
+      await displaySource(url, requested);
+      updateNow();
+      setStatus("Lecture chargée.");
+    }catch(e){
+      setStatus(`Erreur : ${e.message}`, true);
+    }
+  }
+
+  async function displaySource(url, mode){
+    stopMedia();
+    $("placeholder").hidden = true;
+
+    const isM3U8 = /\.m3u8(\?|#|$)/i.test(url);
+    const isVideo = /\.(mp4|webm|ogg)(\?|#|$)/i.test(url) || isM3U8;
+
+    if(mode === "iframe" || (mode === "auto" && !isVideo)){
+      $("frame").hidden = false;
+      $("frame").src = url;
+      $("formatBadge").textContent = "IFRAME";
+      return;
+    }
+
+    if(!isVideo){
+      $("frame").hidden = false;
+      $("frame").src = url;
+      $("formatBadge").textContent = "PAGE";
+      return;
+    }
+
+    $("video").hidden = false;
+    $("formatBadge").textContent = isM3U8 ? "HLS" : "MP4/WEBM";
+
+    if(isM3U8 && window.Hls && Hls.isSupported()){
+      currentHls = new Hls();
+      currentHls.loadSource(url);
+      currentHls.attachMedia($("video"));
+      currentHls.on(Hls.Events.ERROR, (_,data)=>{
+        if(data.fatal) setStatus("Le lecteur HLS n’a pas pu charger la source. Le serveur doit autoriser CORS.", true);
+      });
+    }else{
+      $("video").src = url;
+      try { await $("video").play(); } catch {}
+    }
+
+    $("video").addEventListener("timeupdate", saveWatchPosition, {passive:true});
+  }
+
+  function saveWatchPosition(){
+    const k = progressKey();
+    const v = $("video");
+    if(!v || !Number.isFinite(v.currentTime)) return;
+    S.progress[k] = {...(S.progress[k] || {}), currentTime:v.currentTime, duration:v.duration};
+    save();
+  }
+
+  function stopMedia(){
+    if(currentHls){ currentHls.destroy(); currentHls=null; }
+    $("video").pause(); $("video").removeAttribute("src"); $("video").load();
+    $("frame").src="";
+    $("video").hidden=true; $("frame").hidden=true;
+  }
+
+  function updateNow(){
+    $("now").textContent = `${title()} — Épisode ${$("episode").value}`;
+    $("nowMeta").textContent = `${$("season").selectedOptions[0]?.textContent || "Saison 1"} · ${$("version").value.toUpperCase()} · ${$("site").selectedOptions[0]?.textContent}`;
+  }
+
+  function step(delta){
+    let n = Number($("episode").value) + delta;
+    n = Math.max(1, Math.min($("episode").options.length, n));
+    $("episode").value = String(n);
+    play();
+  }
+
+  function renderHistory(){
+    const h = S.history || [];
+    $("history").innerHTML = h.length ? h.map(x => `
+      <div class="item">
+        <div>
+          <strong>${esc(x.title)}</strong>
+          <small>${esc(x.season)} · É${x.episode} · ${esc(x.version)}</small>
+        </div>
+        <button class="ghost" data-id="${esc(x.id)}">Reprendre</button>
+      </div>`).join("") : `<div style="color:#71809f;text-align:center;padding:12px">Aucune lecture.</div>`;
+
+    $("history").querySelectorAll("[data-id]").forEach(b => b.onclick = () => {
+      const x = S.history.find(y=>y.id===b.dataset.id);
+      if(!x) return;
+
+      const idx = catalogue.findIndex(a => (a.title||a.name||a.matchedTitle)===x.title);
+      if(idx >= 0){
+        $("anime").value=String(idx);
+        loadSeasons().then(()=>{
+          const s=[...$("season").options].find(o=>o.textContent===x.season);
+          if(s) $("season").value=s.value;
+          loadEpisodes().then(()=>{
+            $("episode").value=String(x.episode);
+            $("version").value=x.version;
+            play();
+          });
+        });
+      }else{
+        $("search").value=x.title;
+        search().then(()=>{
+          $("episode").value=String(x.episode);
+          $("version").value=x.version;
+          play();
+        });
+      }
+    });
+  }
+
+  $("searchBtn").onclick=search;
+  $("search").addEventListener("keydown",e=>{if(e.key==="Enter")search()});
+  $("anime").onchange=loadSeasons;
+  $("season").onchange=loadEpisodes;
+  $("version").onchange=loadEpisodes;
+  $("episode").onchange=saveProgress;
+  $("playBtn").onclick=play;
+  $("resumeBtn").onclick=()=>{
+    const p=S.progress[progressKey()];
+    if(!p){setStatus("Aucune progression pour cet anime.",true);return}
+    $("episode").value=String(p.episode);
+    play();
+  };
+  $("prevBtn").onclick=()=>step(-1);
+  $("nextBtn").onclick=()=>step(1);
+  $("openBtn").onclick=()=>{if(currentSource) window.open(currentSource,"_blank","noopener,noreferrer");else setStatus("Aucune source chargée.",true)};
+  $("clearBtn").onclick=()=>{
+    if(confirm("Effacer la progression et l’historique ?")){
+      S.progress={};S.history=[];save();renderHistory();setStatus("Historique effacé.");
+    }
+  };
+
+  // Préférences persistantes
+  if(S.prefs.api) $("api").value=S.prefs.api;
+  $("api").addEventListener("change",()=>{S.prefs.api=$("api").value.trim();save()});
+
+  renderHistory();
+  setStatus("Prêt. Lance une recherche.");
+})();
+</script>
+</body>
+</html>
