@@ -10,45 +10,65 @@ qu'il affiche vient du backend que tu fais tourner toi-même.
 
 ---
 
-## 1. Installation
+## 1. Démarrage
 
-### a. Le backend (obligatoire pour les vraies données)
+### En une commande
+
+```bash
+python3 serve.py
+```
+
+Sous Windows, tu peux simplement **double-cliquer sur `lancer.bat`** ; sur macOS,
+`lancer.command` ; sur Linux, `lancer.sh`.
+
+Ce lanceur fait tout seul :
+
+1. il cherche un backend AnimeSamaApi déjà en route (ports 5000, 5001, 5002) ;
+2. s'il n'en trouve pas, il **le démarre lui-même** si le dossier `AnimeSamaApi` est à
+   côté du panel, dans le dossier parent ou dans ton dossier personnel ;
+3. il sert le panel et relaie `/api` vers ce backend, sur la même origine — donc aucun
+   souci de CORS et **rien à saisir dans les paramètres** ;
+4. il ouvre ton navigateur sur la bonne adresse ;
+5. `Ctrl+C` arrête le panel *et* le backend qu'il a démarré.
+
+Si aucun backend n'est disponible, le panel démarre quand même : le **mode démo**
+(Paramètres → Lecture) fonctionne sans lui. Et si tu lances le backend *après* le panel,
+celui-ci le détecte tout seul à la requête suivante — inutile de le redémarrer.
+
+Options si besoin :
+
+```bash
+python3 serve.py --port 9000              # autre port (incrémenté s'il est occupé)
+python3 serve.py --api http://127.0.0.1:5001   # adresse imposée, sans détection
+python3 serve.py --backend ~/AnimeSamaApi      # dossier du backend à démarrer
+python3 serve.py --no-open                # ne pas ouvrir le navigateur
+```
+
+### Installer le backend (pour les vraies données)
+
+Place-le **à côté du panel** pour que le lanceur le trouve tout seul :
 
 ```bash
 git clone https://github.com/TMCooper/AnimeSamaApi
 cd AnimeSamaApi
 pip install -r requirements.txt
-python main.py                       # écoute sur http://127.0.0.1:5000
 ```
 
-À la première utilisation, construis la base locale : ouvre
-`http://127.0.0.1:5000/api/getAllAnime?r=True` (3 à 5 minutes pour ~4000 fiches).
-Le panel propose de le faire pour toi si la base est vide.
+Inutile de le lancer à la main ensuite : `serve.py` s'en charge.
 
-### b. Le panel
+À la première utilisation, le backend doit indexer le catalogue (~4000 fiches, 3 à
+5 minutes). Le panel te le propose automatiquement quand il constate que la base est
+vide — accepte, et laisse l'onglet ouvert.
 
-```bash
-git clone https://github.com/redslayer34/anime-sama-web-panel
-cd anime-sama-web-panel
-python3 serve.py                     # panel sur http://127.0.0.1:8080
-```
-
-`serve.py` n'utilise que la bibliothèque standard : il sert les fichiers statiques **et**
-relaie `/api/…` vers le backend. Panel et API se retrouvent sur la même origine, ce qui
-supprime d'un coup les problèmes de CORS et de contenu mixte. Laisse alors le champ
-« URL du backend » **vide** dans les paramètres.
-
-Options : `python3 serve.py --port 9000 --api http://127.0.0.1:5001`.
-
-### c. Les autres façons de lancer
+### Et si je préfère tout faire à la main ?
 
 | Méthode | Champ « URL du backend » | Remarque |
 |---|---|---|
-| `python3 serve.py` | *(vide)* | **Recommandé.** Aucun réglage CORS. |
+| `python3 serve.py` | *(vide)* | **Recommandé.** Rien à configurer. |
 | `python3 -m http.server 8080` | `http://127.0.0.1:5000` | Le backend doit autoriser le CORS (ci-dessous). |
-| Double-clic sur `index.html` | `http://127.0.0.1:5000` | `file://` : la plupart des navigateurs bloquent les requêtes. Le panel prévient. |
+| Double-clic sur `index.html` | — | `file://` : le navigateur bloque les requêtes. À éviter. |
 
-Si tu ne veux pas passer par `serve.py`, autorise le CORS côté backend :
+Pour la méthode manuelle, autorise le CORS côté backend :
 
 ```bash
 pip install flask-cors
@@ -111,7 +131,10 @@ index.html      Structure sémantique, sprite SVG, modale <dialog>, zone de noti
 style.css       Design system : variables CSS, 3 thèmes, 5 accents, responsive, animations
 script.js       Toute la logique, en sections numérotées (utilitaires, stockage, API,
                 toasts/modales, navigation, découverte, lecteur, favoris, scans, réglages)
-serve.py        Serveur statique + proxy /api (bibliothèque standard uniquement)
+serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api
+lancer.bat      Raccourci double-clic Windows
+lancer.command  Raccourci double-clic macOS
+lancer.sh       Raccourci Linux
 legacy/         L'ancien fichier preview.html, conservé pour référence
 ```
 
