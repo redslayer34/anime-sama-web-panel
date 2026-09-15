@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="fr" data-theme="dark" data-accent="violet">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="Panel web pour l'API Anime-Sama : recherche, lecteur vidéo HLS/MP4, favoris, historique, progression et lecteur de scans.">
+<meta name="referrer" content="no-referrer">
+<title>Anime-Sama · Panel</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237c5cff'/%3E%3Cpath d='M13 10l9 6-9 6z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
+<script src="script.js" defer></script>
+</head>
+<body>
+
+<!-- Sprite d'icônes : un seul téléchargement, réutilisé via <use href="#i-…"> -->
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5l12 7.5-12 7.5z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5A2.5 2.5 0 016.5 18H20v3H6.5A2.5 2.5 0 014 20.5z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5v.2a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H2a2 2 0 010-4h.2a1.6 1.6 0 001.4-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H8a1.6 1.6 0 001-1.5V2a2 2 0 014 0v.2a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V8a1.6 1.6 0 001.5 1h.2a2 2 0 010 4h-.2a1.6 1.6 0 00-1.4 1z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 10-2.3 5.6"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.2v.1"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.1"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 19V8"/><path d="M8 12l4-4 4 4"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M20 15v5h-5"/><path d="M15 4h5v5"/><path d="M9 20H4v-5"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v6M15 3v6"/><path d="M6 9h12v3a6 6 0 01-12 0z"/><path d="M12 18v3"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 000 18h1.5a2 2 0 001.6-3.2 2 2 0 011.6-3.2H19a2 2 0 002-2.2A9 9 0 0012 3z"/><circle cx="7.5" cy="12" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="14.5" cy="7.5" r="1"/></symbol>
+</svg>
+
+<div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<a class="skip-link" href="#main">Aller au contenu</a>
+
+<header class="topbar">
+  <a class="brand" href="#discover" data-nav="discover">
+    <span class="brand-mark" aria-hidden="true"><svg><use href="#i-play"/></svg></span>
+    <span class="brand-text">
+      <strong>Anime-Sama</strong>
+      <small>Panel</small>
+    </span>
+  </a>
+
+  <form class="quick-search" id="quickSearchForm" role="search">
+    <svg class="qs-icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <input id="quickSearchInput" type="search" placeholder="Rechercher un anime…" aria-label="Rechercher un anime" autocomplete="off" spellcheck="false">
+    <kbd class="qs-kbd" aria-hidden="true">/</kbd>
+  </form>
+
+  <div class="topbar-actions">
+    <button type="button" class="pill" id="apiStatusBtn" title="État de la connexion à l'API" aria-live="polite">
+      <span class="dot" id="apiStatusDot" data-state="unknown"></span>
+      <span id="apiStatusLabel">API&nbsp;?</span>
+    </button>
+    <button type="button" class="icon-btn" id="themeBtn" title="Changer de thème" aria-label="Changer de thème">
+      <svg aria-hidden="true"><use href="#i-palette"/></svg>
+    </button>
+    <button type="button" class="icon-btn" data-nav="settings" title="Paramètres" aria-label="Paramètres">
+      <svg aria-hidden="true"><use href="#i-settings"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="app">
+  <nav class="sidebar" aria-label="Navigation principale">
+    <button type="button" class="nav-item is-active" data-nav="discover"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Découvrir</span></button>
+    <button type="button" class="nav-item" data-nav="player"><svg aria-hidden="true"><use href="#i-play"/></svg><span>Lecteur</span></button>
+    <button type="button" class="nav-item" data-nav="favorites"><svg aria-hidden="true"><use href="#i-star"/></svg><span>Favoris</span><span class="nav-count" id="navFavCount" hidden>0</span></button>
+    <button type="button" class="nav-item" data-nav="history"><svg aria-hidden="true"><use href="#i-clock"/></svg><span>Historique</span></button>
+    <button type="button" class="nav-item" data-nav="scans"><svg aria-hidden="true"><use href="#i-book"/></svg><span>Scans</span></button>
+    <button type="button" class="nav-item" data-nav="settings"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Paramètres</span></button>
+  </nav>
+
+  <main id="main" tabindex="-1">
+
+    <!-- ══════════════════ DÉCOUVRIR ══════════════════ -->
+    <section class="view is-active" id="view-discover" data-view="discover" aria-labelledby="h-discover">
+      <div class="view-head">
+        <div>
+          <h1 id="h-discover">Découvrir</h1>
+          <p class="view-sub">Recherche floue côté API, ou filtrage instantané du catalogue complet mis en cache.</p>
+        </div>
+        <div class="view-actions">
+          <button type="button" class="btn btn-ghost" id="loadCatalogueBtn">
+            <svg aria-hidden="true"><use href="#i-download"/></svg><span>Catalogue complet</span>
+          </button>
+        </div>
+      </div>
+
+      <form class="searchbar" id="searchForm" role="search">
+        <div class="field grow">
+          <svg class="field-icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="searchInput" type="search" placeholder="Ex. One Piece, Frieren, Demon Slayer…" aria-label="Nom de l'anime" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label class="sr-only" for="searchLimit">Nombre de résultats</label>
+          <select id="searchLimit">
+            <option value="5">5 résultats</option>
+            <option value="10" selected>10 résultats</option>
+            <option value="20">20 résultats</option>
+            <option value="40">40 résultats</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" id="searchBtn">Rechercher</button>
+      </form>
+
+      <div class="toolbar" id="discoverToolbar">
+        <div class="field grow">
+          <svg class="field-icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="filterInput" type="search" placeholder="Filtrer la liste affichée…" aria-label="Filtrer les résultats" autocomplete="off">
+        </div>
+        <div class="field">
+          <label class="sr-only" for="sortSelect">Trier</label>
+          <select id="sortSelect">
+            <option value="relevance">Pertinence</option>
+            <option value="az">Titre A → Z</option>
+            <option value="za">Titre Z → A</option>
+            <option value="fav">Favoris d'abord</option>
+          </select>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="favOnlyToggle">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>Favoris uniquement</span>
+        </label>
+        <span class="chip" id="resultCount" aria-live="polite">—</span>
+      </div>
+
+      <div class="card-grid" id="discoverResults"></div>
+    </section>
+
+    <!-- ══════════════════ LECTEUR ══════════════════ -->
+    <section class="view" id="view-player" data-view="player" aria-labelledby="h-player">
+      <div class="player-layout">
+
+        <div class="player-main">
+          <div class="player-head">
+            <div class="player-title">
+              <h1 id="h-player" class="now-title">Aucun épisode chargé</h1>
+              <p class="now-meta" id="nowMeta">Choisis un anime dans « Découvrir », puis un épisode.</p>
+            </div>
+            <div class="player-badges">
+              <span class="chip chip-accent" id="formatBadge">En attente</span>
+              <button type="button" class="icon-btn" id="favCurrentBtn" title="Ajouter aux favoris" aria-pressed="false" hidden>
+                <svg aria-hidden="true"><use href="#i-star"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="player-stage" id="playerStage">
+            <div class="player-placeholder" id="playerPlaceholder">
+              <svg class="ph-icon" aria-hidden="true"><use href="#i-play"/></svg>
+              <p class="ph-title">Le lecteur est prêt</p>
+              <p class="ph-text">Sélectionne un anime, une saison et un épisode pour lancer la lecture.</p>
+              <button type="button" class="btn btn-ghost" data-nav="discover">Parcourir les animes</button>
+            </div>
+            <video id="video" playsinline controls preload="metadata" hidden></video>
+            <iframe id="frame" title="Lecteur externe" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups" hidden></iframe>
+            <div class="stage-overlay" id="stageLoader" hidden><span class="spinner" aria-hidden="true"></span><span>Chargement de la source…</span></div>
+          </div>
+
+          <div class="resume-banner" id="resumeBanner" hidden>
+            <svg aria-hidden="true"><use href="#i-clock"/></svg>
+            <span id="resumeText">Reprendre la lecture</span>
+            <button type="button" class="btn btn-sm btn-primary" id="resumeSeekBtn">Reprendre</button>
+            <button type="button" class="icon-btn icon-btn-sm" id="resumeDismissBtn" aria-label="Ignorer"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+          </div>
+
+          <div class="player-bar">
+            <button type="button" class="btn btn-ghost" id="prevBtn"><svg aria-hidden="true"><use href="#i-prev"/></svg><span>Précédent</span></button>
+            <button type="button" class="btn btn-ghost" id="nextBtn"><span>Suivant</span><svg aria-hidden="true"><use href="#i-next"/></svg></button>
+            <span class="bar-spacer"></span>
+            <label class="switch switch-sm">
+              <input type="checkbox" id="autoplayToggle">
+              <span class="switch-track" aria-hidden="true"></span>
+              <span>Enchaîner</span>
+            </label>
+            <button type="button" class="icon-btn" id="reloadBtn" title="Recharger la source" aria-label="Recharger la source"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
+            <button type="button" class="icon-btn" id="fullscreenBtn" title="Plein écran" aria-label="Plein écran"><svg aria-hidden="true"><use href="#i-expand"/></svg></button>
+            <button type="button" class="icon-btn" id="openSourceBtn" title="Ouvrir la source dans un onglet" aria-label="Ouvrir la source dans un onglet"><svg aria-hidden="true"><use href="#i-external"/></svg></button>
+          </div>
+
+          <p class="player-note" id="playerNote" hidden></p>
+        </div>
+
+        <aside class="player-side" aria-label="Sélection de l'épisode">
+          <div class="side-block">
+            <h2 class="side-title">Sélection</h2>
+            <div class="side-grid">
+              <div class="field-group">
+                <label for="seasonSelect">Saison</label>
+                <select id="seasonSelect"><option value="">—</option></select>
+              </div>
+              <div class="field-group">
+                <label for="versionSelect">Version</label>
+                <select id="versionSelect">
+                  <option value="vostfr">VOSTFR</option>
+                  <option value="vf">VF</option>
+                  <option value="va">VA</option>
+                  <option value="vkr">VKR</option>
+                  <option value="vcn">VCN</option>
+                  <option value="vqc">VQC</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-group">
+              <label for="modeSelect">Mode de lecture</label>
+              <select id="modeSelect">
+                <option value="auto">Automatique (recommandé)</option>
+                <option value="video">Vidéo intégrée (MP4 / HLS)</option>
+                <option value="iframe">Page du lecteur (iframe)</option>
+              </select>
+            </div>
+            <div class="field-group" id="sourceField" hidden>
+              <label for="sourceSelect">Hébergeur</label>
+              <select id="sourceSelect"></select>
+            </div>
+          </div>
+
+          <div class="side-block grow">
+            <div class="side-head">
+              <h2 class="side-title">Épisodes <span class="chip chip-sm" id="episodeCount" hidden>0</span></h2>
+              <button type="button" class="icon-btn icon-btn-sm" id="reloadEpisodesBtn" title="Recharger la liste" aria-label="Recharger la liste des épisodes"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
+            </div>
+            <div class="episode-list" id="episodeList" aria-live="polite"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ══════════════════ FAVORIS ══════════════════ -->
+    <section class="view" id="view-favorites" data-view="favorites" aria-labelledby="h-favorites">
+      <div class="view-head">
+        <div>
+          <h1 id="h-favorites">Favoris</h1>
+          <p class="view-sub">Tes animes épinglés, conservés dans ce navigateur.</p>
+        </div>
+        <div class="view-actions">
+          <div class="field">
+            <label class="sr-only" for="favSort">Trier les favoris</label>
+            <select id="favSort">
+              <option value="recent">Ajout récent</option>
+              <option value="az">Titre A → Z</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card-grid" id="favoritesGrid"></div>
+    </section>
+
+    <!-- ══════════════════ HISTORIQUE ══════════════════ -->
+    <section class="view" id="view-history" data-view="history" aria-labelledby="h-history">
+      <div class="view-head">
+        <div>
+          <h1 id="h-history">Historique</h1>
+          <p class="view-sub">Reprends une lecture là où tu t'es arrêté.</p>
+        </div>
+        <div class="view-actions">
+          <button type="button" class="btn btn-danger" id="clearHistoryBtn"><svg aria-hidden="true"><use href="#i-trash"/></svg><span>Tout effacer</span></button>
+        </div>
+      </div>
+
+      <h2 class="section-title" id="continueTitle" hidden>Reprendre la lecture</h2>
+      <div class="card-grid" id="continueGrid"></div>
+
+      <h2 class="section-title">Lectures récentes</h2>
+      <div class="list" id="historyList"></div>
+    </section>
+
+    <!-- ══════════════════ SCANS ══════════════════ -->
+    <section class="view" id="view-scans" data-view="scans" aria-labelledby="h-scans">
+      <div class="view-head">
+        <div>
+          <h1 id="h-scans">Lecteur de scans</h1>
+          <p class="view-sub">Chapitres fournis par les routes <code>getScanHashmap</code> et <code>getScanLink</code> de l'API.</p>
+        </div>
+      </div>
+
+      <form class="searchbar" id="scanForm">
+        <div class="field grow">
+          <svg class="field-icon" aria-hidden="true"><use href="#i-book"/></svg>
+          <input id="scanInput" type="search" placeholder="Nom du manga (ex. Frieren)" aria-label="Nom du manga" autocomplete="off">
+        </div>
+        <button type="submit" class="btn btn-primary">Charger les chapitres</button>
+      </form>
+
+      <div class="scan-layout">
+        <aside class="side-block scan-chapters" aria-label="Liste des chapitres">
+          <div class="side-head">
+            <h2 class="side-title">Chapitres <span class="chip chip-sm" id="chapterCount" hidden>0</span></h2>
+          </div>
+          <div class="field">
+            <label class="sr-only" for="chapterFilter">Filtrer les chapitres</label>
+            <input id="chapterFilter" type="search" placeholder="N° de chapitre…" autocomplete="off">
+          </div>
+          <div class="chapter-list" id="chapterList"></div>
+        </aside>
+        <div class="scan-reader" id="scanReader"></div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ PARAMÈTRES ══════════════════ -->
+    <section class="view" id="view-settings" data-view="settings" aria-labelledby="h-settings">
+      <div class="view-head">
+        <div>
+          <h1 id="h-settings">Paramètres</h1>
+          <p class="view-sub">Tout est enregistré localement dans ce navigateur (<code>localStorage</code>).</p>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+
+        <section class="panel">
+          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-plug"/></svg> Connexion à l'API</h2>
+          <div class="field-group">
+            <label for="apiInput">URL du backend AnimeSamaApi</label>
+            <input id="apiInput" type="url" inputmode="url" spellcheck="false" placeholder="http://127.0.0.1:5000">
+            <p class="hint">Laisse ce champ <strong>vide</strong> si tu lances le panel avec <code>serve.py</code> : l'API est alors relayée sur la même origine et le CORS ne se pose plus. Sinon, le backend doit autoriser le CORS (voir le README).</p>
+          </div>
+          <div class="field-group">
+            <label for="timeoutInput">Délai d'attente maximal (secondes)</label>
+            <input id="timeoutInput" type="number" min="3" max="600" step="1">
+            <p class="hint">Le premier appel à <code>getAnimeLink</code> peut être long : l'API scrape la page à la volée.</p>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-primary" id="testApiBtn"><svg aria-hidden="true"><use href="#i-plug"/></svg><span>Tester la connexion</span></button>
+            <button type="button" class="btn btn-ghost" id="resolveDomainBtn">Domaine Anime-Sama actif</button>
+          </div>
+          <pre class="diag" id="apiDiag" hidden></pre>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-palette"/></svg> Apparence</h2>
+          <div class="field-group">
+            <label for="themeSelect">Thème</label>
+            <select id="themeSelect">
+              <option value="dark">Sombre (défaut)</option>
+              <option value="abyss">Abysse (noir OLED)</option>
+              <option value="light">Clair</option>
+            </select>
+          </div>
+          <fieldset class="field-group">
+            <legend>Couleur d'accentuation</legend>
+            <div class="accent-row" id="accentRow" role="radiogroup" aria-label="Couleur d'accentuation">
+              <button type="button" class="accent" data-accent="violet" style="--sw:#7c5cff" role="radio" aria-checked="true" aria-label="Violet"></button>
+              <button type="button" class="accent" data-accent="cyan" style="--sw:#22d3ee" role="radio" aria-checked="false" aria-label="Cyan"></button>
+              <button type="button" class="accent" data-accent="rose" style="--sw:#fb5b8f" role="radio" aria-checked="false" aria-label="Rose"></button>
+              <button type="button" class="accent" data-accent="emerald" style="--sw:#2dd4a7" role="radio" aria-checked="false" aria-label="Émeraude"></button>
+              <button type="button" class="accent" data-accent="amber" style="--sw:#f5a524" role="radio" aria-checked="false" aria-label="Ambre"></button>
+            </div>
+          </fieldset>
+          <label class="switch">
+            <input type="checkbox" id="motionToggle">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Réduire les animations</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="compactToggle">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Affichage compact des cartes</span>
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-play"/></svg> Lecture</h2>
+          <div class="field-group">
+            <label for="defaultVersionSelect">Version par défaut</label>
+            <select id="defaultVersionSelect">
+              <option value="vostfr">VOSTFR</option>
+              <option value="vf">VF</option>
+              <option value="va">VA</option>
+              <option value="vkr">VKR</option>
+              <option value="vcn">VCN</option>
+              <option value="vqc">VQC</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="defaultModeSelect">Mode de lecture par défaut</label>
+            <select id="defaultModeSelect">
+              <option value="auto">Automatique</option>
+              <option value="video">Vidéo intégrée</option>
+              <option value="iframe">Page du lecteur</option>
+            </select>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="autoplaySetting">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Enchaîner automatiquement l'épisode suivant</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="rememberToggle">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Mémoriser la position de lecture</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="demoToggle">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Mode démo (sans backend)</span>
+          </label>
+          <p class="hint">Le mode démo remplace l'API par un jeu de données local et des vidéos de test libres de droits (<em>Big Buck Bunny</em>). Il sert à vérifier l'interface et le lecteur, il ne diffuse aucun contenu d'Anime-Sama.</p>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-download"/></svg> Mes données</h2>
+          <dl class="stats" id="statsList"></dl>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-ghost" id="exportBtn"><svg aria-hidden="true"><use href="#i-download"/></svg><span>Exporter (JSON)</span></button>
+            <button type="button" class="btn btn-ghost" id="importBtn"><svg aria-hidden="true"><use href="#i-upload"/></svg><span>Importer</span></button>
+            <input type="file" id="importInput" accept="application/json,.json" hidden>
+            <button type="button" class="btn btn-danger" id="resetBtn"><svg aria-hidden="true"><use href="#i-trash"/></svg><span>Tout réinitialiser</span></button>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-info"/></svg> Raccourcis clavier</h2>
+          <ul class="shortcuts">
+            <li><kbd>/</kbd> Recherche rapide</li>
+            <li><kbd>Espace</kbd> / <kbd>K</kbd> Lecture · pause</li>
+            <li><kbd>←</kbd> <kbd>→</kbd> Reculer · avancer de 5 s</li>
+            <li><kbd>J</kbd> <kbd>L</kbd> Reculer · avancer de 10 s</li>
+            <li><kbd>M</kbd> Couper le son</li>
+            <li><kbd>F</kbd> Plein écran</li>
+            <li><kbd>N</kbd> / <kbd>P</kbd> Épisode suivant · précédent</li>
+            <li><kbd>1</kbd> … <kbd>6</kbd> Changer de vue</li>
+            <li><kbd>Échap</kbd> Fermer la fenêtre modale</li>
+          </ul>
+        </section>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<dialog class="modal" id="modal" aria-labelledby="modalTitle">
+  <form method="dialog" class="modal-inner">
+    <header class="modal-head">
+      <h2 id="modalTitle">Titre</h2>
+      <button type="button" class="icon-btn" id="modalClose" aria-label="Fermer"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+    </header>
+    <div class="modal-body" id="modalBody"></div>
+    <footer class="modal-foot" id="modalFoot"></footer>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+
+<noscript>
+  <p style="padding:24px;text-align:center">Ce panel nécessite JavaScript pour fonctionner.</p>
+</noscript>
+
+</body>
+</html>
