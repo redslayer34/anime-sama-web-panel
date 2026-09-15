@@ -34,7 +34,13 @@ RUN pip install --no-cache-dir \
       "rapidfuzz>=3.6,<4"
 
 COPY docker/api_entry.py /app/AnimeSamaApi/api_entry.py
-COPY docker/bake_index.py docker/check_deps.py /app/
+COPY docker/bake_index.py docker/check_deps.py docker/speedup_patch.py /app/
+
+# AnimeSamaApi résout les épisodes un par un, à raison d'une à trois requêtes
+# HTTP de 3 à 10 s chacune : une saison de 25 épisodes prend plusieurs minutes.
+# Ce patch les résout en parallèle. Il échoue bruyamment si le code amont a
+# changé, plutôt que de produire une image à moitié modifiée.
+RUN python /app/speedup_patch.py /app/AnimeSamaApi
 
 # Contrôle d'intégrité : un module absent fait échouer le build ici, en le
 # nommant, plutôt qu'au démarrage du conteneur chez l'hébergeur. Une simple
@@ -48,6 +54,7 @@ RUN python /app/bake_index.py || echo "Indexation non effectuée au build ; elle
 COPY index.html style.css script.js serve.py /app/
 
 ENV PANEL_AUTO_INDEX=1 \
+    PANEL_RESOLVER_WORKERS=6 \
     PORT=8080
 EXPOSE 8080
 

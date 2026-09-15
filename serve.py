@@ -54,6 +54,13 @@ PROXY_PREFIXES = ("/api/", "/api?")
 # Le backend garde ces routes longues : scraping à la volée, indexation initiale.
 SLOW_ROUTES = ("/api/getAllAnime", "/api/getAnimeLink", "/api/getScanLink")
 
+# Ces routes-là sont si lentes qu'aucune requête HTTP ne doit les attendre :
+# getAnimeLink résout l'URL vidéo de chaque épisode l'un après l'autre, soit une
+# à trois requêtes par épisode. Elles passent donc par une tâche de fond, et la
+# réponse immédiate est un 202 que le panel suit en interrogeant à nouveau.
+JOB_ROUTES = ("/api/getAnimeLink", "/api/getScanLink")
+CACHE_TTL = 6 * 3600
+
 
 def say(message=""):
     print(message, flush=True)
@@ -237,6 +244,70 @@ class Indexing:
             cls.done_at = time.time()
 
 
+def fetch_upstream(base, path, timeout):
+    """Interroge le backend. Retourne (statut, type_de_contenu, corps)."""
+    request = urllib.request.Request(base + path, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as upstream:
+            return (upstream.status,
+                    upstream.headers.get("Content-Type", "application/json"),
+                    upstream.read())
+    except urllib.error.HTTPError as err:          # le backend a répondu une erreur
+        return err.code, "application/json", err.read()
+    except Exception as err:                       # injoignable ou délai dépassé
+        return 502, "application/json", json.dumps({
+            "error": "backend injoignable", "detail": str(err),
+        }).encode()
+
+
+class Jobs:
+    """Tâches de fond partagées, avec leur cache.
+
+    Deux visiteurs qui demandent la même saison au même moment partagent la même
+    tâche ; une fois résolue, elle est servie instantanément à tout le monde
+    pendant six heures. C'est ce cache qui rend le panel utilisable sur une
+    petite instance : seul le tout premier chargement d'une saison est long."""
+
+    lock = threading.Lock()
+    running = {}      # clé -> instant de démarrage
+    results = {}      # clé -> (expiration, statut, type de contenu, corps)
+
+    # Un échec n'est gardé que brièvement : il doit pouvoir être retenté vite,
+    # sans pour autant qu'un panel ouvert martèle le backend en boucle.
+    ERROR_TTL = 30
+
+    @classmethod
+    def get_or_start(cls, key, base, timeout):
+        """Retourne ("done", résultat) ou ("pending", secondes écoulées).
+
+        Tout se décide sous un seul verrou : sans ça, une tâche qui se termine
+        entre la lecture du cache et le démarrage relancerait le même travail."""
+        with cls.lock:
+            entry = cls.results.get(key)
+            if entry and time.time() < entry[0]:
+                return "done", entry
+            cls.results.pop(key, None)
+
+            started = cls.running.get(key)
+            if started is not None:
+                return "pending", time.time() - started
+
+            cls.running[key] = time.time()
+
+        threading.Thread(target=cls._work, args=(key, base, timeout), daemon=True).start()
+        return "pending", 0.0
+
+    @classmethod
+    def _work(cls, key, base, timeout):
+        started = time.time()
+        status, content_type, payload = fetch_upstream(base, key, timeout)
+        ttl = CACHE_TTL if status == 200 else cls.ERROR_TTL
+        with cls.lock:
+            cls.running.pop(key, None)
+            cls.results[key] = (time.time() + ttl, status, content_type, payload)
+        say(f"Tâche {key.split('?')[0]} terminée en {round(time.time() - started)} s (HTTP {status}).")
+
+
 class PanelHandler(SimpleHTTPRequestHandler):
     api_base = None          # renseigné par serve()
     timeout = 600
@@ -306,20 +377,25 @@ class PanelHandler(SimpleHTTPRequestHandler):
             }).encode())
 
         timeout = self.timeout if self.path.startswith(SLOW_ROUTES) else min(self.timeout, 60)
-        request = urllib.request.Request(PanelHandler.api_base + self.path,
-                                         headers={"Accept": "application/json"})
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as upstream:
-                payload = upstream.read()
-                return self.send_payload(upstream.status, payload,
-                                         upstream.headers.get("Content-Type", "application/json"), body)
-        except urllib.error.HTTPError as err:        # le backend a répondu une erreur
-            return self.send_payload(err.code, err.read(), "application/json", body)
-        except Exception as err:                     # injoignable ou délai dépassé
+
+        if self.path.startswith(JOB_ROUTES):
+            return self.serve_job(PanelHandler.api_base, timeout, body)
+
+        status, content_type, payload = fetch_upstream(PanelHandler.api_base, self.path, timeout)
+        if status == 502:
             PanelHandler.api_base = None             # forcera une nouvelle détection
-            return self.send_payload(502, json.dumps({
-                "error": "backend injoignable", "detail": str(err),
-            }).encode(), body=body)
+        return self.send_payload(status, payload, content_type, body)
+
+    def serve_job(self, base, timeout, body=True):
+        """Répond tout de suite : le résultat s'il est prêt, sinon un 202."""
+        state, value = Jobs.get_or_start(self.path, base, timeout)
+        if state == "done":
+            _, status, content_type, payload = value
+            return self.send_payload(status, payload, content_type, body)
+        return self.send_payload(202, json.dumps({
+            "pending": True,
+            "elapsed": round(value, 1),
+        }).encode(), body=body)
 
     def send_payload(self, status, payload, content_type="application/json", body=True):
         self.send_response(status)

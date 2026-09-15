@@ -27,6 +27,8 @@ const CATALOGUE_TTL = 24 * 60 * 60 * 1000;
 const CATALOGUE_MAX = 3_000_000;        // ne pas persister un catalogue trop lourd
 const HISTORY_MAX   = 120;
 const SAVE_EVERY    = 5000;             // fréquence d'enregistrement de la position
+const JOB_POLL      = 2000;             // intervalle d'interrogation d'une tâche de fond
+const JOB_MAX_WAIT  = 15 * 60 * 1000;   // au-delà, on abandonne
 
 const LOCAL_BACKEND = "http://127.0.0.1:5000";
 
@@ -363,7 +365,31 @@ function mixedContentIssue() {
   return location.protocol === "https:" && apiBase().startsWith("http://");
 }
 
-async function request(path, { signal, timeoutMs } = {}) {
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+  });
+}
+
+/** Le serveur répond 202 tant qu'une tâche de fond travaille : on la suit ici,
+    ce qui évite de laisser une requête HTTP ouverte pendant plusieurs minutes.
+    Tous les appels en bénéficient sans avoir à s'en préoccuper. */
+async function request(path, options = {}) {
+  const deadline = Date.now() + JOB_MAX_WAIT;
+  for (let attempt = 0; ; attempt++) {
+    const result = await requestOnce(path, options);
+    if (!result || !result.pending) return result;
+
+    options.onPending?.({ elapsed: result.elapsed ?? 0, attempt });
+    if (Date.now() > deadline) {
+      throw new ApiError(`La résolution des épisodes dépasse ${Math.round(JOB_MAX_WAIT / 60000)} minutes. Le serveur est peut-être surchargé.`, "timeout");
+    }
+    await sleep(JOB_POLL, options.signal);
+  }
+}
+
+async function requestOnce(path, { signal, timeoutMs } = {}) {
   const base = apiBase();
   if (!base && location.protocol === "file:") {
     throw new ApiError("Aucune URL d'API n'est configurée, et une page ouverte en file:// n'a pas d'origine à interroger. Renseigne l'URL du backend dans les paramètres.", "config");
@@ -408,14 +434,22 @@ async function request(path, { signal, timeoutMs } = {}) {
     clearTimeout(timer);
   }
 
-  if (!response.ok) {
+  if (!response.ok && response.status !== 202) {
     throw new ApiError(`L'API a répondu HTTP ${response.status} (${response.statusText || "erreur"}) sur ${path.split("?")[0]}.`, "http");
   }
 
   const text = await response.text();
   if (!text.trim()) return null;
-  try { return JSON.parse(text); }
+
+  let parsed;
+  try { parsed = JSON.parse(text); }
   catch { throw new ApiError("La réponse de l'API n'est pas du JSON valide.", "parse", text.slice(0, 200)); }
+
+  // 202 + pending : le serveur a mis la requête en tâche de fond.
+  if (response.status === 202 && parsed && parsed.pending) {
+    return { pending: true, elapsed: Number(parsed.elapsed) || 0 };
+  }
+  return parsed;
 }
 
 /* Normalisation : l'API peut renvoyer `lien`, `url` ou `link` selon la route. */
@@ -585,7 +619,7 @@ const source = {
     });
   },
 
-  async episodes(anime, slug, version) {
+  async episodes(anime, slug, version, options = {}) {
     if (this.isDemo) {
       await demo.wait(420);
       const season = demo.find(anime.title)?.seasons.find((s) => s.slug === slug);
@@ -598,7 +632,9 @@ const source = {
     }
     const key = `episodes:${anime.title}:${slug}:${version}`;
     return cached(memory.episodes, key, async () => {
-      const raw = await request(`/api/getAnimeLink?n=${encodeURIComponent(anime.title)}&s=${encodeURIComponent(slug)}&v=${encodeURIComponent(version)}`);
+      const raw = await request(
+        `/api/getAnimeLink?n=${encodeURIComponent(anime.title)}&s=${encodeURIComponent(slug)}&v=${encodeURIComponent(version)}`,
+        { onPending: options.onPending });
       return normEpisodes(raw);
     });
   },
@@ -1174,7 +1210,11 @@ async function loadEpisodes({ episode = null, seek = null, autoplay = false, for
 
   let episodes = [];
   try {
-    episodes = await source.episodes(player.anime, player.season.slug, player.version);
+    episodes = await source.episodes(player.anime, player.season.slug, player.version, {
+      onPending: ({ elapsed }) => {
+        if (token === player.token) renderEpisodes("loading", "", elapsed);
+      },
+    });
   } catch (err) {
     if (token !== player.token) return;
     player.episodes = [];
@@ -1391,11 +1431,19 @@ function saveWatchTime(finished = false) {
   persist();
 }
 
-function renderEpisodes(status, message = "") {
+function renderEpisodes(status, message = "", elapsed = 0) {
   clear(episodeList);
   episodeCount.hidden = true;
 
   if (status === "loading") {
+    // Le serveur résout l'URL vidéo de chaque épisode : c'est long la première
+    // fois, instantané ensuite grâce au cache partagé. Sans ce compteur,
+    // l'attente ressemble à un blocage.
+    if (elapsed > 3) {
+      episodeList.append(el("p", { class: "hint", style: { marginBottom: "8px" } },
+        `Résolution des épisodes chez les hébergeurs… ${Math.round(elapsed)} s. ` +
+        "Le premier chargement d'une saison est long ; les suivants seront immédiats."));
+    }
     for (let i = 0; i < 6; i++) episodeList.append(el("div", { class: "skeleton skeleton-row", style: { height: "40px" } }));
     return;
   }

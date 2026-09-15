@@ -132,7 +132,25 @@ ci-dessous) — inutile de chercher ailleurs.
 | `PANEL_PASSWORD` | Mot de passe d'accès. Vide = site ouvert à tous. |
 | `PANEL_USER` | Identifiant, `panel` par défaut. |
 | `PANEL_AUTO_INDEX` | `1` pour indexer au démarrage si le catalogue est vide. |
+| `PANEL_RESOLVER_WORKERS` | Résolutions d'épisodes simultanées (6 par défaut). |
 | `PORT` | Fourni par l'hébergeur ; le panel s'y adapte seul. |
+
+### Vitesse de chargement des épisodes
+
+La route `getAnimeLink` d'AnimeSamaApi est de loin la plus lourde : elle résout l'URL
+vidéo de **chaque épisode** chez son hébergeur, à raison d'une à trois requêtes HTTP de 3
+à 10 secondes. En série, une saison de 25 épisodes demande plusieurs minutes. Trois
+mesures s'y attaquent :
+
+- **Résolution parallèle.** L'image applique un patch à AnimeSamaApi qui traite les
+  épisodes dans un pool de threads, avec une session HTTP par thread. Comptez un gain d'un
+  facteur 5 à 6. Réglable par `PANEL_RESOLVER_WORKERS` (6 par défaut) ; monter plus haut
+  expose à un blocage par les hébergeurs vidéo.
+- **Aucune requête suspendue.** Le serveur répond immédiatement `202` et travaille en
+  tâche de fond ; le panel suit l'avancement et affiche le temps écoulé. Ni le navigateur
+  ni le proxy de l'hébergeur ne peuvent plus couper la requête, quelle que soit sa durée.
+- **Cache partagé de 6 heures.** Une saison déjà résolue est servie instantanément, à tous
+  les visiteurs. Seul le tout premier chargement est long.
 
 ### Les deux limites à connaître avant de déployer
 
@@ -209,8 +227,8 @@ serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie
                 gère le mot de passe et l'indexation de fond
 Dockerfile      Image « panel + backend » pour l'hébergement
 render.yaml     Blueprint Render (plan gratuit, health check, mot de passe)
-docker/         Point d'entrée du backend en conteneur, contrôle des dépendances
-                et indexation au build
+docker/         Point d'entrée du backend en conteneur, contrôle des dépendances,
+                indexation au build et patch de résolution parallèle
 lancer.py       Raccourci double-clic universel (utile si les .bat sont bloqués)
 lancer.bat      Raccourci double-clic Windows
 lancer.command  Raccourci double-clic macOS

@@ -18,3 +18,7 @@ services:
       # chaque redémarrage sur l'offre gratuite).
       - key: PANEL_AUTO_INDEX
         value: "1"
+      # Résolutions d'épisodes simultanées. Au-delà d'une poignée, les
+      # hébergeurs vidéo limitent les requêtes venant d'une même adresse.
+      - key: PANEL_RESOLVER_WORKERS
+        value: "6"
