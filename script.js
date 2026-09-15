@@ -15,6 +15,9 @@
 /* ─────────────────────────────────────────────
    1. Constantes
    ───────────────────────────────────────────── */
+/** Capacités annoncées par le serveur qui sert la page (voir /panel/state). */
+const panelServer = { relay: false };
+
 const STORE_KEY     = "animeSamaPanel.v1";
 const CATALOGUE_KEY = "animeSamaPanel.catalogue.v1";
 const LEGACY_KEY    = "animeWebPlayer.v3";          // ancien panel mono-fichier
@@ -47,6 +50,7 @@ const DEFAULT_SETTINGS = {
   autoplay: true,
   remember: true,
   demo: false,
+  relay: "auto",        // auto | always | never
 };
 
 /* ─────────────────────────────────────────────
@@ -108,6 +112,20 @@ function safeUrl(value) {
     const url = new URL(value.trim(), document.baseURI);
     return (url.protocol === "http:" || url.protocol === "https:") ? url.href : null;
   } catch { return null; }
+}
+
+/** Les hébergeurs vidéo n'envoient pas d'en-tête CORS : le navigateur refuse
+    alors de lire leur flux. Le faire transiter par le serveur du panel le
+    ramène à une requête de même origine, et ajoute au passage le Referer que
+    réclament les protections anti-hotlink. */
+function relayUrl(url) {
+  // Le relais n'existe que si la page est servie par serve.py. Sur un
+  // hébergement statique, tenter la bascule ne ferait qu'ajouter une requête
+  // perdue et un message d'erreur trompeur.
+  if (!panelServer.relay || location.protocol === "file:") return null;
+  const safe = safeUrl(url);
+  if (!safe) return null;
+  return new URL(`stream?u=${encodeURIComponent(safe)}`, location.href).href;
 }
 
 function formatTime(seconds) {
@@ -1002,10 +1020,13 @@ async function fetchPanelState() {
   if (!indexing.available || location.protocol === "file:") return null;
   try {
     const response = await fetch(new URL("panel/state", location.href), { cache: "no-store" });
-    if (!response.ok) { indexing.available = false; return null; }
-    return await response.json();
+    if (!response.ok) { indexing.available = false; panelServer.relay = false; return null; }
+    const state = await response.json();
+    panelServer.relay = Boolean(state?.relay);
+    return state;
   } catch {
     indexing.available = false;
+    panelServer.relay = false;
     return null;
   }
 }
@@ -1101,6 +1122,8 @@ const player = {
   pendingSeek: null,
   lastSaved: 0,
   recovered: false,
+  relayed: false,        // la source courante passe-t-elle par le relais ?
+  triedRelay: false,     // pour ne basculer qu'une fois par source
 };
 
 function setNote(message) {
@@ -1320,7 +1343,8 @@ function mountIframe(url) {
   setNote("Le lecteur externe est isolé dans une iframe : les pop-ups publicitaires sont bloqués. Si la vidéo refuse de démarrer, certains hébergeurs interdisent l'intégration — utilise alors « Ouvrir la source ».");
 }
 
-function mountSource(url, { seek = null } = {}) {
+function mountSource(url, { seek = null, relay = null } = {}) {
+  const wasRelayed = relay === null ? (state.settings.relay === "always") : relay;
   teardown();
   setNote("");
   const safe = safeUrl(url);
@@ -1332,6 +1356,8 @@ function mountSource(url, { seek = null } = {}) {
   }
 
   player.current = safe;
+  player.relayed = false;
+  if (relay === null) player.triedRelay = false;
   placeholder.hidden = true;
 
   const isHls  = /\.m3u8(\?|#|$)/i.test(safe);
@@ -1348,8 +1374,15 @@ function mountSource(url, { seek = null } = {}) {
   video.hidden = false;
   player.kind = isHls ? "hls" : "file";
   player.pendingSeek = seek;
-  formatBadge.textContent = isHls ? "HLS" : "Vidéo";
+
+  const relayed = wasRelayed ? relayUrl(safe) : null;
+  const playable = relayed || safe;
+  player.relayed = Boolean(relayed);
+  formatBadge.textContent = (isHls ? "HLS" : "Vidéo") + (player.relayed ? " · relais" : "");
   setStageLoading(true);
+  if (player.relayed) {
+    setNote("Lecture via le serveur : l'hébergeur n'autorise pas la lecture directe depuis le navigateur.");
+  }
 
   if (isHls && !video.canPlayType("application/vnd.apple.mpegurl")) {
     if (!window.Hls || !window.Hls.isSupported()) {
@@ -1361,13 +1394,29 @@ function mountSource(url, { seek = null } = {}) {
     player.hls = hls;
     hls.on(window.Hls.Events.ERROR, onHlsError);
     hls.on(window.Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
-    hls.loadSource(safe);
+    hls.loadSource(playable);
     hls.attachMedia(video);
   } else {
-    video.setAttribute("src", safe);
+    video.setAttribute("src", playable);
   }
 
   video.play().catch(() => { /* la lecture automatique peut être refusée par le navigateur */ });
+}
+
+/** Rejoue la source courante à travers le relais, une seule fois.
+    Retourne false si ce n'est pas possible ou déjà tenté. */
+function retryThroughRelay(reason) {
+  if (player.relayed || player.triedRelay) return false;
+  if (state.settings.relay === "never") return false;
+  if (!player.current || player.kind === "iframe") return false;
+  if (!relayUrl(player.current)) return false;
+
+  player.triedRelay = true;
+  const seek = Number.isFinite(video.currentTime) && video.currentTime > 1 ? video.currentTime : player.pendingSeek;
+  notify("Lecture directe refusée par l'hébergeur : nouvelle tentative via le serveur.",
+    { type: "info", title: "Changement de route", timeout: 5000 });
+  mountSource(player.current, { seek, relay: true });
+  return true;
 }
 
 function onHlsError(_event, data) {
@@ -1384,8 +1433,11 @@ function onHlsError(_event, data) {
     player.hls?.recoverMediaError();
     return;
   }
+  if (retryThroughRelay("hls")) return;
   setStageLoading(false);
-  setNote("Le flux HLS n'a pas pu être lu. L'hébergeur doit autoriser le CORS pour cette page ; sinon, passe en mode « Page du lecteur » ou ouvre la source dans un onglet.");
+  setNote(player.relayed
+    ? "Le flux HLS reste illisible même en passant par le serveur : le lien a probablement expiré. Recharge la liste des épisodes, ou essaie un autre hébergeur."
+    : "Le flux HLS n'a pas pu être lu. Passe en mode « Page du lecteur », ou ouvre la source dans un onglet.");
 }
 
 /* Écouteurs attachés une seule fois : pas d'accumulation entre deux épisodes. */
@@ -1399,8 +1451,11 @@ video.addEventListener("loadedmetadata", () => {
 video.addEventListener("playing", () => setStageLoading(false));
 video.addEventListener("waiting", () => setStageLoading(true));
 video.addEventListener("error", () => {
+  if (retryThroughRelay("video")) return;
   setStageLoading(false);
-  setNote("Le navigateur n'a pas pu lire cette source (CORS, lien expiré ou format non supporté). Essaie un autre hébergeur, le mode « Page du lecteur », ou « Ouvrir la source ».");
+  setNote(player.relayed
+    ? "Même relayée par le serveur, cette source reste illisible : le lien a sans doute expiré. Recharge la liste des épisodes, ou choisis un autre hébergeur."
+    : "Le navigateur n'a pas pu lire cette source (lien expiré ou format non supporté). Essaie un autre hébergeur, le mode « Page du lecteur », ou « Ouvrir la source ».");
 });
 video.addEventListener("timeupdate", () => {
   const now = Date.now();
@@ -1550,7 +1605,7 @@ $("#fullscreenBtn").addEventListener("click", () => {
   });
 });
 $("#openSourceBtn").addEventListener("click", () => {
-  const url = safeUrl(player.current);
+  const url = safeUrl(player.current);   // l'originale, pas celle du relais
   if (!url) { notify("Aucune source chargée.", { type: "warn", timeout: 3000 }); return; }
   window.open(url, "_blank", "noopener,noreferrer");
 });
@@ -1897,6 +1952,7 @@ function syncSettingsUI() {
   $("#autoplaySetting").checked = state.settings.autoplay;
   $("#autoplayToggle").checked = state.settings.autoplay;
   $("#rememberToggle").checked = state.settings.remember;
+  $("#relaySelect").value = state.settings.relay;
   $("#demoToggle").checked = state.settings.demo;
   renderStats();
 }
@@ -1941,6 +1997,12 @@ bindSetting("#autoplaySetting", "change", (input) => {
   $("#autoplayToggle").checked = input.checked;
 });
 bindSetting("#rememberToggle", "change", (input) => { state.settings.remember = input.checked; });
+bindSetting("#relaySelect", "change", (input) => {
+  state.settings.relay = input.value;
+  if (player.current && player.kind !== "iframe") {
+    mountSource(player.current, { seek: video.currentTime || null, relay: input.value === "always" });
+  }
+});
 bindSetting("#demoToggle", "change", (input) => {
   state.settings.demo = input.checked;
   memory.seasons.clear();

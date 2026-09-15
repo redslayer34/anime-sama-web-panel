@@ -28,8 +28,12 @@ import argparse
 import base64
 import errno
 import hmac
+import ipaddress
 import json
 import os
+import re
+import shutil
+import socket
 import signal
 import socket
 import subprocess
@@ -60,6 +64,15 @@ SLOW_ROUTES = ("/api/getAllAnime", "/api/getAnimeLink", "/api/getScanLink")
 # réponse immédiate est un 202 que le panel suit en interrogeant à nouveau.
 JOB_ROUTES = ("/api/getAnimeLink", "/api/getScanLink")
 CACHE_TTL = 6 * 3600
+
+# Relais de flux vidéo. Les hébergeurs n'envoient pas d'en-tête CORS : un
+# navigateur refuse donc de lire leurs flux depuis le panel. En passant par le
+# serveur, la lecture redevient une requête de même origine.
+STREAM_ROUTE = "/stream"
+STREAM_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+             "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
+PLAYLIST_MAX = 4 * 1024 * 1024        # une playlist HLS dépasse rarement quelques Ko
+STREAM_CHUNK = 64 * 1024
 
 
 def say(message=""):
@@ -244,6 +257,63 @@ class Indexing:
             cls.done_at = time.time()
 
 
+def stream_target(url):
+    """Valide une cible de relais. Retourne (url, None) ou (None, raison).
+
+    Sans ce filtre, la route servirait de rebond vers le réseau interne de
+    l'hébergeur — à commencer par le backend sur 127.0.0.1."""
+    if not url:
+        return None, "paramètre « u » manquant"
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        return None, "seules les URL http(s) sont relayées"
+    if not parts.hostname:
+        return None, "hôte absent"
+    try:
+        infos = socket.getaddrinfo(parts.hostname, None)
+    except OSError:
+        return None, "hôte introuvable"
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if (address.is_private or address.is_loopback or address.is_link_local
+                or address.is_reserved or address.is_multicast):
+            return None, "adresse interne refusée"
+    return url, None
+
+
+def proxied(url):
+    return f"{STREAM_ROUTE}?u={urllib.parse.quote(url, safe='')}"
+
+
+def is_playlist(url, content_type):
+    path = urllib.parse.urlsplit(url).path.lower()
+    return (path.endswith((".m3u8", ".m3u"))
+            or "mpegurl" in (content_type or "").lower())
+
+
+URI_ATTR = re.compile(r'URI="([^"]*)"')
+
+
+def rewrite_playlist(text, base_url):
+    """Fait passer par le relais tout ce qu'une playlist HLS référence.
+
+    Sans cette réécriture, seul le manifeste serait relayé : le navigateur irait
+    chercher les segments en direct et se heurterait de nouveau au CORS."""
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lines.append(line)
+        elif stripped.startswith("#"):
+            # Clés de chiffrement, segment d'initialisation, rendus alternatifs.
+            lines.append(URI_ATTR.sub(
+                lambda m: 'URI="%s"' % proxied(urllib.parse.urljoin(base_url, m.group(1))),
+                line))
+        else:
+            lines.append(proxied(urllib.parse.urljoin(base_url, stripped)))
+    return "\n".join(lines) + "\n"
+
+
 def fetch_upstream(base, path, timeout):
     """Interroge le backend. Retourne (statut, type_de_contenu, corps)."""
     request = urllib.request.Request(base + path, headers={"Accept": "application/json"})
@@ -336,6 +406,8 @@ class PanelHandler(SimpleHTTPRequestHandler):
 
         if not self.authorized():
             return
+        if path == STREAM_ROUTE:
+            return self.serve_stream(body)
         if path == "/panel/state":
             return self.send_state(body)
         if is_api_call(self.path):
@@ -354,6 +426,58 @@ class PanelHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         return False
 
+    def serve_stream(self, body=True):
+        """Relaie un flux vidéo, en réécrivant les playlists HLS au passage."""
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        target, refusal = stream_target((params.get("u") or [""])[0])
+        if refusal:
+            return self.send_payload(400, json.dumps({"error": refusal}).encode(), body=body)
+
+        origin = urllib.parse.urlsplit(target)
+        headers = {
+            "User-Agent": STREAM_UA,
+            "Accept": "*/*",
+            # Beaucoup d'hébergeurs refusent une requête sans Referer cohérent.
+            "Referer": f"{origin.scheme}://{origin.netloc}/",
+        }
+        if self.headers.get("Range"):
+            headers["Range"] = self.headers["Range"]
+
+        try:
+            upstream = urllib.request.urlopen(
+                urllib.request.Request(target, headers=headers), timeout=30)
+        except urllib.error.HTTPError as err:
+            return self.send_payload(err.code, json.dumps({
+                "error": f"l'hébergeur a répondu HTTP {err.code}",
+            }).encode(), body=body)
+        except Exception as err:
+            return self.send_payload(502, json.dumps({
+                "error": "hébergeur injoignable", "detail": str(err),
+            }).encode(), body=body)
+
+        with upstream:
+            content_type = upstream.headers.get("Content-Type", "application/octet-stream")
+
+            if is_playlist(target, content_type):
+                payload = rewrite_playlist(
+                    upstream.read(PLAYLIST_MAX).decode("utf-8", "replace"),
+                    upstream.geturl()).encode("utf-8")
+                return self.send_payload(200, payload, "application/vnd.apple.mpegurl", body)
+
+            self.send_response(upstream.status)
+            for name in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
+                value = upstream.headers.get(name)
+                if value:
+                    self.send_header(name, value)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            if not body:
+                return
+            try:
+                shutil.copyfileobj(upstream, self.wfile, STREAM_CHUNK)
+            except (BrokenPipeError, ConnectionResetError):
+                pass          # le lecteur a changé de position ou fermé l'onglet
+
     def send_state(self, body=True):
         """État du service, pour la bannière d'indexation du panel."""
         base = PanelHandler.api_base or detect_backend()
@@ -362,6 +486,7 @@ class PanelHandler(SimpleHTTPRequestHandler):
             "indexing": Indexing.running,
             "error": Indexing.error,
             "protected": bool(password()),
+            "relay": True,          # la route /stream existe sur ce serveur
         }).encode()
         self.send_payload(200, payload, body=body)
 

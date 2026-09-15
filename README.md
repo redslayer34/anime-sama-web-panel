@@ -152,6 +152,31 @@ mesures s'y attaquent :
 - **Cache partagé de 6 heures.** Une saison déjà résolue est servie instantanément, à tous
   les visiteurs. Seul le tout premier chargement est long.
 
+### Lecture des vidéos : le relais
+
+Les hébergeurs vidéo (Sibnet, Vidmoly, SendVid…) n'envoient pas d'en-tête CORS et
+vérifient souvent le `Referer`. Un navigateur refuse donc de lire leur flux depuis le
+panel, ce qui se traduisait par « le navigateur n'a pas pu lire cette source ».
+
+Le serveur expose une route `/stream` qui relaie le flux : la lecture redevient une
+requête de même origine, et le bon `Referer` est ajouté au passage. Les playlists HLS sont
+réécrites pour que les segments, les clés de chiffrement et les qualités alternatives
+passent aussi par le relais — sans quoi seul le manifeste serait relayé. Les requêtes
+`Range` sont transmises, donc l'avance rapide fonctionne.
+
+Réglage dans **Paramètres → Lecture → Relais vidéo** :
+
+| Valeur | Effet |
+|---|---|
+| **Automatique** (défaut) | Lecture directe d'abord, bascule sur le relais à la première erreur. |
+| Toujours | Passe par le relais dès le départ. |
+| Jamais | Lecture directe uniquement. |
+
+Deux points à connaître : **tout le trafic vidéo transite alors par ton hébergement** et
+consomme sa bande passante — sur une offre gratuite, c'est la ressource qui partira le
+plus vite. Et le relais refuse les adresses internes (`127.0.0.1`, réseaux privés,
+métadonnées cloud), pour ne pas servir de rebond vers le réseau de l'hébergeur.
+
 ### Les deux limites à connaître avant de déployer
 
 **Cloudflare peut bloquer le serveur.** AnimeSamaApi passe par `cloudscraper`, qui
@@ -264,10 +289,12 @@ du `<script>` par `hls.min.js`.
 
 - **Hébergeurs vidéo.** `getAnimeLink` renvoie tantôt un fichier direct (MP4 / M3U8),
   tantôt une page de lecteur (Sibnet, Vidmoly, SendVid…). Les fichiers directs sont lus
-  dans la balise `<video>` ; les pages de lecteur sont affichées en iframe. Un hébergeur
-  qui refuse l'intégration (`X-Frame-Options`) ou le CORS ne pourra pas être lu dans la
-  page : le bouton « Ouvrir la source » reste disponible. Le panel affiche le message
-  correspondant au lieu d'un écran noir.
+  dans la balise `<video>`, au besoin à travers le relais décrit plus haut ; les pages de
+  lecteur sont affichées en iframe. Un hébergeur qui refuse l'intégration
+  (`X-Frame-Options`) ne pourra pas être lu dans la page : le bouton « Ouvrir la source »
+  reste disponible. Le panel affiche le message correspondant au lieu d'un écran noir.
+  Le relais n'est proposé que si la page est servie par `serve.py` ; sur un hébergement
+  statique, la route n'existe pas et le panel ne tente pas la bascule.
 - **Iframe isolée.** Les lecteurs externes tournent en `sandbox`, sans `allow-popups` :
   les pop-ups publicitaires sont bloqués. Si un lecteur en dépend, passe par « Ouvrir la
   source ».

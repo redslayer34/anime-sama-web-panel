@@ -410,6 +410,15 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span>Mémoriser la position de lecture</span>
           </label>
+          <div class="field-group">
+            <label for="relaySelect">Relais vidéo par le serveur</label>
+            <select id="relaySelect">
+              <option value="auto">Automatique — seulement si la lecture directe échoue</option>
+              <option value="always">Toujours</option>
+              <option value="never">Jamais</option>
+            </select>
+            <p class="hint">Les hébergeurs vidéo n'autorisent pas la lecture directe depuis une autre page (CORS). Le relais fait transiter le flux par ton serveur, ce qui résout le problème mais consomme sa bande passante. Sans effet en mode « Page du lecteur ».</p>
+          </div>
           <label class="switch">
             <input type="checkbox" id="demoToggle">
             <span class="switch-track" aria-hidden="true"></span>
