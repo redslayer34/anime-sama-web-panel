@@ -254,6 +254,8 @@ Dockerfile      Image « panel + backend » pour l'hébergement
 render.yaml     Blueprint Render (plan gratuit, health check, mot de passe)
 docker/         Point d'entrée du backend en conteneur, contrôle des dépendances,
                 indexation au build et patch de résolution parallèle
+tests/          Campagne de tests : doublures de backend, tests Python et
+                suites navigateur (voir tests/README.md)
 lancer.py       Raccourci double-clic universel (utile si les .bat sont bloqués)
 lancer.bat      Raccourci double-clic Windows
 lancer.command  Raccourci double-clic macOS
@@ -306,7 +308,28 @@ du `<script>` par `hls.min.js`.
 
 ---
 
-## 7. En cas de problème au démarrage
+## 7. Tests
+
+```bash
+python3 tests/run.py            # toute la campagne
+python3 tests/run.py --unit     # seulement les tests Python (aucune dépendance)
+```
+
+Sept suites : deux en Python, cinq en navigateur via Playwright. Elles couvrent
+le parcours complet du panel, le mot de passe, les tâches de fond et leur cache,
+la bannière d'indexation, le relais vidéo et l'équivalence du patch de
+parallélisation. Chacune démarre ses propres doublures de backend — **aucun test
+ne contacte Anime-Sama**.
+
+Les tests navigateur demandent Node et Playwright
+(`npm install playwright && npx playwright install chromium`) ; sans eux,
+`run.py` le signale et exécute quand même les tests Python.
+
+Détail des suites et des conventions : [`tests/README.md`](tests/README.md).
+
+---
+
+## 8. En cas de problème au démarrage
 
 **`PermissionError: [WinError 10013]`** — le port est réservé par Windows (Hyper-V, WSL
 ou Docker s'en attribuent des plages entières, même sans rien écouter dessus). Le
@@ -330,7 +353,7 @@ démarrera tout seul au prochain lancement.
 
 ---
 
-## 8. Vie privée et usage
+## 9. Vie privée et usage
 
 Aucune donnée ne quitte ton navigateur : ni compte, ni télémétrie, ni requête vers un
 service tiers autre que le CDN de hls.js. Favoris, historique et progression vivent dans

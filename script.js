@@ -386,7 +386,12 @@ function mixedContentIssue() {
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      // `reason` peut être indéfini selon le navigateur : sans ce repli, la
+      // promesse serait rejetée avec `undefined` et l'erreur deviendrait muette.
+      reject(signal.reason ?? new DOMException("annulé", "AbortError"));
+    }, { once: true });
   });
 }
 
@@ -1405,7 +1410,7 @@ function mountSource(url, { seek = null, relay = null } = {}) {
 
 /** Rejoue la source courante à travers le relais, une seule fois.
     Retourne false si ce n'est pas possible ou déjà tenté. */
-function retryThroughRelay(reason) {
+function retryThroughRelay() {
   if (player.relayed || player.triedRelay) return false;
   if (state.settings.relay === "never") return false;
   if (!player.current || player.kind === "iframe") return false;
@@ -1433,7 +1438,7 @@ function onHlsError(_event, data) {
     player.hls?.recoverMediaError();
     return;
   }
-  if (retryThroughRelay("hls")) return;
+  if (retryThroughRelay()) return;
   setStageLoading(false);
   setNote(player.relayed
     ? "Le flux HLS reste illisible même en passant par le serveur : le lien a probablement expiré. Recharge la liste des épisodes, ou essaie un autre hébergeur."
@@ -1451,7 +1456,7 @@ video.addEventListener("loadedmetadata", () => {
 video.addEventListener("playing", () => setStageLoading(false));
 video.addEventListener("waiting", () => setStageLoading(true));
 video.addEventListener("error", () => {
-  if (retryThroughRelay("video")) return;
+  if (retryThroughRelay()) return;
   setStageLoading(false);
   setNote(player.relayed
     ? "Même relayée par le serveur, cette source reste illisible : le lien a sans doute expiré. Recharge la liste des épisodes, ou choisis un autre hébergeur."

@@ -1,0 +1,179 @@
+"""
+Équivalence entre la boucle séquentielle d'origine et la version parallèle.
+
+Les deux implémentations sont recopiées telles qu'elles figurent dans le code
+(avant et après patch) et reçoivent exactement les mêmes stubs. On vérifie que
+la sortie est identique, y compris dans les cas tordus : épisodes absents chez
+certains lecteurs, liens vides, hébergeurs injoignables, sibnet en repli.
+"""
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+DELAY = 0.05          # simule une requête HTTP réseau
+
+
+def make_world(seed):
+    rnd = random.Random(seed)
+    nb = 30
+    lecteurs = ["eps1", "eps2", "eps3"]
+    all_eps = {}
+    for i, l in enumerate(lecteurs):
+        urls = []
+        for e in range(nb):
+            r = rnd.random()
+            if r < 0.15:
+                urls.append("")                                   # entrée vide
+            elif r < 0.30:
+                urls.append(f"https://sibnet.ru/{l}/{e}")          # sibnet
+            else:
+                urls.append(f"https://host{i}.test/{l}/{e}")
+        # un lecteur plus court : certains épisodes n'y sont pas
+        if i == 2:
+            urls = urls[:nb - 7]
+        all_eps[l] = urls
+
+    playable = {u for l in all_eps for u in all_eps[l] if u and rnd.random() < 0.55}
+    resolvable = {}
+    for l in all_eps:
+        for u in all_eps[l]:
+            if not u or "sibnet" in u:
+                continue
+            r = rnd.random()
+            if r < 0.25:
+                resolvable[u] = None                                      # échec
+            elif r < 0.55:
+                resolvable[u] = {"url": u + ".m3u8", "type": "m3u8"}
+            elif r < 0.8:
+                resolvable[u] = {"url": u + "#embed", "type": "embed"}
+            else:
+                resolvable[u] = {"type": "embed"}                         # sans url
+    for u in list(resolvable):
+        v = resolvable[u]
+        if isinstance(v, dict) and v.get("url") and rnd.random() < 0.5:
+            playable.add(v["url"])
+    return nb, lecteurs, all_eps, playable, resolvable
+
+
+def build_stubs(playable, resolvable):
+    def resolve_video_url(url):
+        time.sleep(DELAY)
+        if url not in resolvable:
+            raise RuntimeError("hôte inconnu")
+        return resolvable[url]
+
+    def is_stream_playable(link):
+        time.sleep(DELAY)
+        return bool(link) and link in playable
+
+    return resolve_video_url, is_stream_playable
+
+
+def original(nb, valid_lecteurs, all_eps, resolve_video_url, is_stream_playable):
+    good_link = []
+    for episode in range(nb):
+        best_link = None
+        for lecteur in valid_lecteurs:
+            eps_list = all_eps[lecteur]
+            if episode >= len(eps_list):
+                continue
+            url_to_test = eps_list[episode].strip(" \t\n\r\xa0")
+            if not url_to_test:
+                continue
+            is_sibnet = "sibnet.ru" in url_to_test.lower()
+            try:
+                resolved = resolve_video_url(url_to_test)
+            except Exception:
+                resolved = None
+            if resolved and isinstance(resolved, dict):
+                resolved_url = resolved.get("url")
+                resolved_type = resolved.get("type")
+                if resolved_type in ("m3u8", "mp4") and resolved_url:
+                    if is_stream_playable(resolved_url):
+                        best_link = resolved_url
+                        break
+                elif resolved_type == "embed" and resolved_url:
+                    if is_stream_playable(resolved_url):
+                        best_link = resolved_url
+                        break
+            if is_sibnet and not best_link:
+                if is_stream_playable(url_to_test):
+                    best_link = url_to_test
+                    break
+        if best_link:
+            good_link.append({"episode": episode, "url": best_link})
+    return good_link
+
+
+def patched(nb, valid_lecteurs, all_eps, resolve_video_url, is_stream_playable, workers=6):
+    good_link = []
+
+    def _panel_resolve(episode):
+        for lecteur in valid_lecteurs:
+            eps_list = all_eps[lecteur]
+            if episode >= len(eps_list):
+                continue
+            url_to_test = eps_list[episode].strip(" \t\n\r\xa0")
+            if not url_to_test:
+                continue
+            is_sibnet = "sibnet.ru" in url_to_test.lower()
+            try:
+                resolved = resolve_video_url(url_to_test)
+            except Exception:
+                resolved = None
+            if resolved and isinstance(resolved, dict):
+                resolved_url = resolved.get("url")
+                resolved_type = resolved.get("type")
+                if resolved_type in ("m3u8", "mp4") and resolved_url:
+                    if is_stream_playable(resolved_url):
+                        return resolved_url
+                elif resolved_type == "embed" and resolved_url:
+                    if is_stream_playable(resolved_url):
+                        return resolved_url
+            if is_sibnet:
+                if is_stream_playable(url_to_test):
+                    return url_to_test
+        return None
+
+    if nb > 0:
+        with ThreadPoolExecutor(max_workers=min(workers, nb)) as pool:
+            resolved_links = list(pool.map(_panel_resolve, range(nb)))
+    else:
+        resolved_links = []
+
+    for episode, best_link in enumerate(resolved_links):
+        if best_link:
+            good_link.append({"episode": episode, "url": best_link})
+    return good_link
+
+
+failures = 0
+total_seq = total_par = 0.0
+for seed in range(12):
+    nb, lecteurs, all_eps, playable, resolvable = make_world(seed)
+    resolve, playable_fn = build_stubs(playable, resolvable)
+
+    t = time.time(); a = original(nb, lecteurs, all_eps, resolve, playable_fn); total_seq += time.time() - t
+    t = time.time(); b = patched(nb, lecteurs, all_eps, resolve, playable_fn); total_par += time.time() - t
+
+    if a != b:
+        failures += 1
+        print(f"  KO  jeu {seed} : sorties différentes")
+        for x, y in zip(a, b):
+            if x != y:
+                print("      ", x, "!=", y); break
+    else:
+        print(f"  ok  jeu {seed} : {len(a)} épisodes retenus, sorties identiques")
+
+# cas limites
+for nb_edge, label in [(0, "aucun épisode")]:
+    a = original(nb_edge, lecteurs, all_eps, resolve, playable_fn)
+    b = patched(nb_edge, lecteurs, all_eps, resolve, playable_fn)
+    status = "ok " if a == b == [] else "KO "
+    if a != b: failures += 1
+    print(f"  {status} cas limite : {label}")
+
+print(f"\nséquentiel : {total_seq:.1f} s   parallèle : {total_par:.1f} s   "
+      f"gain : {total_seq / max(total_par, 0.001):.1f}×")
+print("ÉQUIVALENCE CONFIRMÉE" if not failures else f"{failures} ÉCHEC(S)")
+raise SystemExit(1 if failures else 0)

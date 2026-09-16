@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Lanceur du panel Anime-Sama.
+Lanceur et serveur du panel Anime-Sama.
 
 Une seule commande suffit :
 
@@ -14,14 +14,31 @@ Le script se charge de tout :
      donc aucun souci de CORS, et rien à saisir dans les paramètres ;
   4. il ouvre le navigateur sur la bonne adresse.
 
-Options utiles :
+Ce qu'il fait en plus, pour un panel exposé sur Internet :
+  • /healthz, ouvert sans identifiants, pour la sonde de l'hébergeur ;
+  • mot de passe sur tout le reste dès que PANEL_PASSWORD est défini ;
+  • /stream, qui relaie les flux vidéo dont l'hébergeur refuse la lecture
+    directe (CORS, contrôle du Referer), playlists HLS réécrites au passage ;
+  • getAnimeLink et getScanLink traitées en tâche de fond, avec un cache
+    partagé : aucune requête HTTP ne reste ouverte pendant des minutes ;
+  • indexation du catalogue au démarrage s'il est vide (PANEL_AUTO_INDEX).
+
+Options :
     --api http://127.0.0.1:5001   forcer l'adresse du backend (pas de détection)
     --backend ../AnimeSamaApi     dossier du backend à démarrer
+    --backend-entry api_entry.py  script du backend à exécuter
     --no-backend                  ne pas chercher ni démarrer de backend
     --port 9000                   port du panel (incrémenté s'il est occupé)
+    --host 0.0.0.0                interface d'écoute
+    --timeout 600                 délai maximal d'un appel API, en secondes
+    --auto-index                  indexer le catalogue au démarrage s'il est vide
     --no-open                     ne pas ouvrir le navigateur
+    --verbose                     journaliser chaque requête
+
+Variables d'environnement : PORT, PANEL_PASSWORD, PANEL_USER, PANEL_AUTO_INDEX.
 
 Bibliothèque standard uniquement : aucune dépendance à installer.
+Tests : python3 tests/run.py
 """
 
 import argparse
@@ -33,7 +50,6 @@ import json
 import os
 import re
 import shutil
-import socket
 import signal
 import socket
 import subprocess
@@ -73,6 +89,22 @@ STREAM_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
              "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
 PLAYLIST_MAX = 4 * 1024 * 1024        # une playlist HLS dépasse rarement quelques Ko
 STREAM_CHUNK = 64 * 1024
+
+# Le relais sert du contenu distant depuis l'origine du panel. Un hébergeur
+# hostile qui renverrait du HTML verrait donc son script s'exécuter avec les
+# droits de la page. Seuls les types médias traversent tels quels ; le reste est
+# rendu inerte.
+STREAM_SAFE_TYPES = (
+    "video/", "audio/", "image/", "text/vtt",
+    "application/octet-stream", "application/mp4",
+    "application/vnd.apple.mpegurl", "application/x-mpegurl",
+    "application/dash+xml",
+)
+
+
+def inert_type(content_type):
+    base = (content_type or "").split(";")[0].strip().lower()
+    return base if base.startswith(STREAM_SAFE_TYPES) else "application/octet-stream"
 
 
 def say(message=""):
@@ -346,6 +378,22 @@ class Jobs:
     # sans pour autant qu'un panel ouvert martèle le backend en boucle.
     ERROR_TTL = 30
 
+    # Une entrée périmée n'était retirée que si la même clé était redemandée :
+    # sur un serveur qui tourne des semaines, le cache ne faisait que grossir.
+    MAX_ENTRIES = 200
+
+    @classmethod
+    def _evict(cls):
+        """À appeler en tenant le verrou : purge les périmées, puis les plus
+        anciennes si la limite est dépassée."""
+        now = time.time()
+        for key in [k for k, v in cls.results.items() if v[0] <= now]:
+            del cls.results[key]
+        excess = len(cls.results) - cls.MAX_ENTRIES
+        if excess > 0:
+            for key in sorted(cls.results, key=lambda k: cls.results[k][0])[:excess]:
+                del cls.results[key]
+
     @classmethod
     def get_or_start(cls, key, base, timeout):
         """Retourne ("done", résultat) ou ("pending", secondes écoulées).
@@ -375,12 +423,16 @@ class Jobs:
         with cls.lock:
             cls.running.pop(key, None)
             cls.results[key] = (time.time() + ttl, status, content_type, payload)
+            cls._evict()
         say(f"Tâche {key.split('?')[0]} terminée en {round(time.time() - started)} s (HTTP {status}).")
 
 
 class PanelHandler(SimpleHTTPRequestHandler):
-    api_base = None          # renseigné par serve()
-    timeout = 600
+    api_base = None          # renseigné par main()
+    # Surtout pas `timeout` : StreamRequestHandler utilise cet attribut pour le
+    # délai du socket. Le nommer ainsi faisait couper toute lecture vidéo au
+    # bout de --timeout secondes.
+    api_timeout = 600
     quiet = True
 
     def __init__(self, *args, **kwargs):
@@ -465,11 +517,16 @@ class PanelHandler(SimpleHTTPRequestHandler):
                 return self.send_payload(200, payload, "application/vnd.apple.mpegurl", body)
 
             self.send_response(upstream.status)
-            for name in ("Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"):
+            self.send_header("Content-Type", inert_type(content_type))
+            for name in ("Content-Length", "Content-Range", "Accept-Ranges"):
                 value = upstream.headers.get(name)
                 if value:
                     self.send_header(name, value)
             self.send_header("Cache-Control", "no-store")
+            # Double garde-fou : pas de reniflage de type, et exécution
+            # impossible même si un HTML passait à travers.
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "sandbox")
             self.end_headers()
             if not body:
                 return
@@ -501,7 +558,8 @@ class PanelHandler(SimpleHTTPRequestHandler):
                           "dans Paramètres → Lecture.",
             }).encode())
 
-        timeout = self.timeout if self.path.startswith(SLOW_ROUTES) else min(self.timeout, 60)
+        timeout = (self.api_timeout if self.path.startswith(SLOW_ROUTES)
+                   else min(self.api_timeout, 60))
 
         if self.path.startswith(JOB_ROUTES):
             return self.serve_job(PanelHandler.api_base, timeout, body)
@@ -527,6 +585,7 @@ class PanelHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         if body:
             self.wfile.write(payload)
@@ -610,7 +669,7 @@ def main():
     api_base, child = resolve_backend(args)
 
     PanelHandler.api_base = api_base
-    PanelHandler.timeout = args.timeout
+    PanelHandler.api_timeout = args.timeout
     PanelHandler.quiet = not args.verbose
 
     # $PORT défini et non contredit par --port : la plateforme impose ce port.
