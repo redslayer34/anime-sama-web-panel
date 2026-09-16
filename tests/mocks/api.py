@@ -78,13 +78,24 @@ class Handler(BaseHTTPRequestHandler):
             if version == "vf" and season == "saison2":
                 return self.json([])                     # version absente : cas réel
             count = 3 if season == "film" else 8
+
+            def episode_url(i):
+                return (f"{FIXTURES}/test.mp4" if i % 3 == 0
+                        else f"https://vidmoly.invalid/embed-{season}-{i}.html")
+
+            # Mode épisode prioritaire (chargement intelligent) : &e=N. Le vrai
+            # backend patché numérote toujours depuis 0 (`enumerate()` sur une
+            # liste Python), quelle que soit la saison — indépendamment de la
+            # variation ci-dessous, qui teste seulement le tableau complet.
+            episode_arg = query.get("e", "")
+            if episode_arg.isdigit():
+                target = int(episode_arg)
+                match = {"episode": target, "url": episode_url(target)} if 0 <= target < count else None
+                return self.json({"count": count, "results": [match] if match else []})
+
             start = 0 if season == "saison2" else 1      # l'API numérote parfois depuis 0
-            return self.json([
-                {"episode": i,
-                 "url": (f"{FIXTURES}/test.mp4" if i % 3 == 0
-                         else f"https://vidmoly.invalid/embed-{season}-{i}.html")}
-                for i in range(start, start + count)
-            ])
+            episodes = [{"episode": i, "url": episode_url(i)} for i in range(start, start + count)]
+            return self.json(episodes)
 
         if path == "/api/getAnimeSamaURL":
             return self.json([{"url": "https://anime-sama.org"}])

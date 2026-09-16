@@ -1,10 +1,16 @@
 """
-Équivalence entre la boucle séquentielle d'origine et la version parallèle.
+Équivalence entre la boucle séquentielle d'origine, la version parallèle, et le
+mode « épisode prioritaire » du chargement intelligent.
 
-Les deux implémentations sont recopiées telles qu'elles figurent dans le code
+Les trois implémentations sont recopiées telles qu'elles figurent dans le code
 (avant et après patch) et reçoivent exactement les mêmes stubs. On vérifie que
 la sortie est identique, y compris dans les cas tordus : épisodes absents chez
 certains lecteurs, liens vides, hébergeurs injoignables, sibnet en repli.
+
+Le mode prioritaire (`priority()`) doit donner, pour chaque épisode pris
+séparément, exactement le même lien que la résolution complète (`original()`)
+— c'est la garantie que « charger cet épisode seul » et « charger toute la
+saison » ne divergent jamais silencieusement.
 """
 import random
 import time
@@ -147,6 +153,40 @@ def patched(nb, valid_lecteurs, all_eps, resolve_video_url, is_stream_playable, 
     return good_link
 
 
+def priority(nb, valid_lecteurs, all_eps, resolve_video_url, is_stream_playable, episode):
+    """Reproduit le branchement `if episode is not None:` ajouté dans LOOP_NEW."""
+
+    def _panel_resolve(ep):
+        for lecteur in valid_lecteurs:
+            eps_list = all_eps[lecteur]
+            if ep >= len(eps_list):
+                continue
+            url_to_test = eps_list[ep].strip(" \t\n\r\xa0")
+            if not url_to_test:
+                continue
+            is_sibnet = "sibnet.ru" in url_to_test.lower()
+            try:
+                resolved = resolve_video_url(url_to_test)
+            except Exception:
+                resolved = None
+            if resolved and isinstance(resolved, dict):
+                resolved_url = resolved.get("url")
+                resolved_type = resolved.get("type")
+                if resolved_type in ("m3u8", "mp4") and resolved_url:
+                    if is_stream_playable(resolved_url):
+                        return resolved_url
+                elif resolved_type == "embed" and resolved_url:
+                    if is_stream_playable(resolved_url):
+                        return resolved_url
+            if is_sibnet:
+                if is_stream_playable(url_to_test):
+                    return url_to_test
+        return None
+
+    link = _panel_resolve(episode) if 0 <= episode < nb else None
+    return {"count": nb, "results": [{"episode": episode, "url": link}] if link else []}
+
+
 failures = 0
 total_seq = total_par = 0.0
 for seed in range(12):
@@ -164,6 +204,42 @@ for seed in range(12):
                 print("      ", x, "!=", y); break
     else:
         print(f"  ok  jeu {seed} : {len(a)} épisodes retenus, sorties identiques")
+
+    # Épisode prioritaire : un échantillon d'indices doit correspondre
+    # exactement à ce que la résolution complète a trouvé pour ce même indice.
+    # `_panel_resolve` est le même code dans les deux chemins (copié-collé
+    # depuis LOOP_NEW) : ce qui varie d'un épisode à l'autre ne teste que
+    # cette fonction, déjà couverte par l'équivalence original/patched
+    # ci-dessus sur les nb épisodes. Un échantillon suffit donc à couvrir le
+    # seul code propre au mode prioritaire (le branchement et l'emballage
+    # count/results), sans faire exploser le temps du test (chaque épisode
+    # coûte jusqu'à 3 × DELAY, et le refaire nb fois par seed double le temps
+    # total pour un gain de confiance nul au-delà d'un échantillon).
+    sample = sorted({0, nb // 3, nb // 2, (2 * nb) // 3, nb - 1} & set(range(nb)))
+    full_by_episode = {item["episode"]: item["url"] for item in a}
+    mismatches = []
+    for ep in sample:
+        got = priority(nb, lecteurs, all_eps, resolve, playable_fn, ep)
+        if got["count"] != nb:
+            mismatches.append(f"count={got['count']} attendu {nb} (épisode {ep})")
+            continue
+        expected = full_by_episode.get(ep)
+        actual = got["results"][0]["url"] if got["results"] else None
+        if actual != expected:
+            mismatches.append(f"épisode {ep} : prioritaire={actual!r} != complet={expected!r}")
+    if mismatches:
+        failures += 1
+        print(f"  KO  jeu {seed} : épisode prioritaire divergent ({len(mismatches)}) :: {mismatches[0]}")
+    else:
+        print(f"  ok  jeu {seed} : épisode prioritaire identique à la résolution complète ({len(sample)} indices testés sur {nb})")
+
+    # Index hors bornes : ni erreur, ni résultat fantôme.
+    out_of_range = priority(nb, lecteurs, all_eps, resolve, playable_fn, nb + 5)
+    if out_of_range["count"] != nb or out_of_range["results"] != []:
+        failures += 1
+        print(f"  KO  jeu {seed} : index hors bornes mal géré :: {out_of_range}")
+    else:
+        print(f"  ok  jeu {seed} : index hors bornes renvoie un résultat vide")
 
 # cas limites
 for nb_edge, label in [(0, "aucun épisode")]:

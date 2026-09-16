@@ -32,6 +32,7 @@ from lib.ports import free                                    # noqa: E402
 PORTS = {
     "api": 5000, "static": 8080, "auth": 8405,
     "jobs": 8501, "indexing": 8403, "relay": 8602, "video": 9100,
+    "smart": 8603, "smart_degraded": 8604,
 }
 SHOTS = TESTS / "screenshots"
 PASSWORD = "mot-de-passe-test"
@@ -190,6 +191,37 @@ def browser_relay():
         stack.stop()
 
 
+def browser_smart_loading():
+    stack = Stack()
+    try:
+        free(PORTS["api"], PORTS["smart"])
+        stack.mock("api_smart.py", PORTS["api"])
+        wait_for(f"http://127.0.0.1:{PORTS['api']}/")
+        stack.panel(PORTS["smart"])
+        if not wait_for(f"http://127.0.0.1:{PORTS['smart']}/healthz"):
+            print("  le panel n'a pas démarré"); return False
+        return run(["node", str(TESTS / "browser" / "smart-loading.test.js")],
+                   {"PANEL_URL": f"http://127.0.0.1:{PORTS['smart']}"})
+    finally:
+        stack.stop()
+
+
+def browser_smart_loading_degraded():
+    stack = Stack()
+    try:
+        free(PORTS["api"], PORTS["smart_degraded"])
+        stack.start([sys.executable, str(TESTS / "mocks" / "api_smart.py"), str(PORTS["api"])],
+                    env={"MOCK_UNPATCHED": "1"})
+        wait_for(f"http://127.0.0.1:{PORTS['api']}/")
+        stack.panel(PORTS["smart_degraded"])
+        if not wait_for(f"http://127.0.0.1:{PORTS['smart_degraded']}/healthz"):
+            print("  le panel n'a pas démarré"); return False
+        return run(["node", str(TESTS / "browser" / "smart-loading-degraded.test.js")],
+                   {"PANEL_URL": f"http://127.0.0.1:{PORTS['smart_degraded']}"})
+    finally:
+        stack.stop()
+
+
 UNIT = [
     ("Relais de flux (filtre, playlists, Range)", unit_stream),
     ("Équivalence de la résolution parallèle", unit_equivalence),
@@ -200,6 +232,8 @@ BROWSER = [
     ("Tâches de fond et cache", browser_jobs),
     ("Bannière d'indexation", browser_indexing),
     ("Bascule vers le relais vidéo", browser_relay),
+    ("Chargement intelligent (épisode prioritaire)", browser_smart_loading),
+    ("Chargement intelligent : dégradation sans patch", browser_smart_loading_degraded),
 ]
 
 

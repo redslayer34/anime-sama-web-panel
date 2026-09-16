@@ -764,6 +764,17 @@ select option { background: var(--surface); color: var(--text) }
 .ep-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--accent) }
 .ep-check { width: 15px; height: 15px; color: var(--ok); flex: none }
 
+/* Chargement intelligent : le nombre total d'épisodes est connu avant que
+   chacun soit résolu. Un bouton non encore tenté reste cliquable mais discret ;
+   un bouton en cours de résolution montre un petit indicateur, sans bloquer
+   le reste de la liste. */
+.episode.is-unresolved { color: var(--faint) }
+.episode.is-unresolved .ep-num { color: var(--faint) }
+.episode.is-unresolved:hover { color: var(--text) }
+.episode.is-resolving { cursor: progress }
+.episode.is-resolving .ep-label { color: var(--muted) }
+.ep-spinner { margin-left: auto; flex: none }
+
 /* Scans */
 .scan-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start }
 .scan-chapters { position: sticky; top: calc(var(--topbar-h) + 18px) }

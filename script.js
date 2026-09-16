@@ -662,6 +662,32 @@ const source = {
     });
   },
 
+  /** Résout un seul épisode (chargement intelligent) au lieu d'attendre toute
+      la saison. Le serveur patché répond {count, results} ; un backend non
+      patché ignore « e » et renvoie la saison déjà entière — le panel s'en
+      aperçoit et se dégrade proprement (voir `degraded` ci-dessous). Jamais
+      mis en cache côté client : le serveur le fait déjà (voir README/tests),
+      et `player.episodes` sert lui-même d'état "déjà connu" pour la session. */
+  async episode(anime, slug, version, episodeNumber, options = {}) {
+    if (this.isDemo) {
+      const episodes = await this.episodes(anime, slug, version, options);
+      return { degraded: true, episodes };
+    }
+    const raw = await request(
+      `/api/getAnimeLink?n=${encodeURIComponent(anime.title)}&s=${encodeURIComponent(slug)}&v=${encodeURIComponent(version)}&e=${encodeURIComponent(episodeNumber)}`,
+      { onPending: options.onPending });
+    if (Array.isArray(raw)) {
+      // Le paramètre « e » n'a pas été compris (backend non patché) : la
+      // saison entière est déjà là, rien à faire en tâche de fond ensuite.
+      return { degraded: true, episodes: normEpisodes(raw) };
+    }
+    return {
+      degraded: false,
+      count: Math.max(0, Number(raw?.count) || 0),
+      episode: normEpisodes(raw)[0] ?? null,
+    };
+  },
+
   async domain() {
     if (this.isDemo) { await demo.wait(120); return [{ url: "https://exemple.invalid (mode démo)" }]; }
     return request("/api/getAnimeSamaURL");
@@ -1129,6 +1155,12 @@ const player = {
   recovered: false,
   relayed: false,        // la source courante passe-t-elle par le relais ?
   triedRelay: false,     // pour ne basculer qu'une fois par source
+
+  // Chargement intelligent : le nombre total d'épisodes est connu avant que
+  // `episodes` soit complet (voir loadEpisodes/resolveEpisodePriority).
+  episodeCount: 0,
+  resolvingEpisodes: new Set(),  // numéros en cours de résolution prioritaire
+  pendingPlay: null,             // dernier épisode cliqué, à lancer dès prêt
 };
 
 function setNote(message) {
@@ -1229,41 +1261,176 @@ async function openAnime(anime, options = {}) {
   await loadEpisodes({ episode: options.episode ?? null, seek: options.seek ?? null, autoplay: options.autoplay !== false && options.episode != null });
 }
 
+/** Insère ou remplace un épisode dans `player.episodes`, en gardant l'ordre. */
+function mergeEpisode(episode) {
+  const index = player.episodes.findIndex((e) => e.number === episode.number);
+  if (index >= 0) player.episodes[index] = episode;
+  else {
+    player.episodes.push(episode);
+    player.episodes.sort((a, b) => a.number - b.number);
+  }
+}
+
+/** Résout le reste de la saison en tâche de fond, sans bloquer l'affichage.
+    Réutilise l'appel habituel (inchangé, toujours en cache côté serveur) :
+    même travail que par le passé, seulement réordonné dans le temps. */
+function warmFullSeason(token) {
+  const anime = player.anime, season = player.season, version = player.version;
+  source.episodes(anime, season.slug, version)
+    .then((episodes) => {
+      if (token !== player.token) return;
+      player.episodes = episodes;
+      player.episodeCount = episodes.length;
+      renderEpisodes(episodes.length ? "ok" : "empty");
+    })
+    .catch((err) => {
+      if (token !== player.token) return;
+      // L'épisode déjà résolu reste jouable ; seuls les autres boutons
+      // restent "à tenter au clic" plutôt que garantis disponibles.
+      notify(`Le reste de la saison n'a pas pu être chargé en fond : ${describeError(err)}`,
+        { type: "warn", title: "Chargement partiel", timeout: 7000 });
+    });
+}
+
 async function loadEpisodes({ episode = null, seek = null, autoplay = false, force = false } = {}) {
   if (!player.anime || !player.season) return;
   const token = ++player.token;
+  player.episodes = [];
+  player.episodeCount = 0;
+  player.resolvingEpisodes = new Set();
+  player.pendingPlay = null;
   renderEpisodes("loading");
 
   if (force) invalidate(`episodes:${player.anime.title}:${player.season.slug}:${player.version}`);
 
-  let episodes = [];
+  // Chargement intelligent : on résout d'abord la cible probable (reprise de
+  // lecture, ou premier épisode) plutôt que d'attendre toute la saison. Le
+  // décompte total arrive dans la même réponse, donc les boutons s'affichent
+  // dès ce premier aller-retour — voir source.episode().
+  const saved = progressEntry(false);
+  const target = Number(episode ?? saved?.lastEpisode ?? 0);
+
+  let degraded = false;
   try {
-    episodes = await source.episodes(player.anime, player.season.slug, player.version, {
+    const result = await source.episode(player.anime, player.season.slug, player.version, target, {
       onPending: ({ elapsed }) => {
         if (token === player.token) renderEpisodes("loading", "", elapsed);
       },
     });
+    if (token !== player.token) return;
+
+    degraded = result.degraded;
+    if (degraded) {
+      player.episodes = result.episodes;
+      player.episodeCount = result.episodes.length;
+    } else {
+      player.episodeCount = result.count;
+      if (result.episode) mergeEpisode(result.episode);
+    }
   } catch (err) {
     if (token !== player.token) return;
     player.episodes = [];
+    player.episodeCount = 0;
     renderEpisodes("error", describeError(err));
     setApiStatus(err instanceof ApiError && err.kind === "network" ? "offline" : null);
     return;
   }
   if (token !== player.token) return;
 
-  player.episodes = episodes;
-  renderEpisodes(episodes.length ? "ok" : "empty");
   setApiStatus(source.isDemo ? "demo" : "online");
-  if (!episodes.length) return;
 
-  const saved = progressEntry(false);
-  const wanted = episode ?? saved?.lastEpisode ?? null;
-  const exists = wanted != null && episodes.some((e) => e.number === Number(wanted));
-  const target = exists ? Number(wanted) : episodes[0].number;
+  if (!player.episodeCount) {
+    renderEpisodes("empty");
+    return;
+  }
 
-  if (autoplay) playEpisode(target, { seek });
-  else selectEpisode(target);
+  // « ok » si la saison est déjà entière (dégradé, ou tout juste chargée par
+  // le fond), « partial » si seule la cible est connue pour l'instant.
+  renderEpisodes(episodesStatus());
+
+  const found = player.episodes.find((e) => e.number === target);
+  if (found) {
+    if (autoplay) playResolvedEpisode(found, { seek });
+    else selectEpisode(target);
+  }
+  // Sinon : la cible demandée n'existe pas pour cette version (ex. reprise
+  // sur un numéro qui n'y figure plus). Les boutons restent utilisables ;
+  // aucune lecture automatique tant que l'utilisateur n'en choisit pas un.
+
+  if (!degraded) warmFullSeason(token);
+}
+
+/** Comme `resolveEpisodePriority`, mais synchrone : l'épisode est déjà connu. */
+function playResolvedEpisode(episode, { seek = null, sourceIndex = 0 } = {}) {
+  player.episode = episode;
+  fillSources(episode);
+  sourceSelect.value = String(clamp(sourceIndex, 0, episode.sources.length - 1));
+  resumeBanner.hidden = true;
+
+  const entry = progressEntry(true);
+  entry.lastEpisode = episode.number;
+  entry.updatedAt = Date.now();
+  recordHistory(episode.number);
+  persist();
+
+  mountSource(episode.sources[Number(sourceSelect.value)], { seek });
+  renderEpisodeStates();
+  updatePlayerHeader();
+  renderHistory();
+  renderContinue();
+}
+
+/** "ok" une fois tous les épisodes connus, "partial" tant qu'il en manque. */
+function episodesStatus() {
+  return player.episodes.length >= player.episodeCount ? "ok" : "partial";
+}
+
+/** Résout un épisode qui n'est pas encore dans `player.episodes` (bouton
+    cliqué avant la fin du chargement de fond), puis le joue si c'est
+    toujours ce que l'utilisateur attend une fois la réponse arrivée.
+
+    Reconstruit toute la liste à chaque changement d'état (plutôt que de se
+    contenter de `renderEpisodeStates()`) : les classes `is-resolving` et le
+    spinner qui l'accompagne n'existent que sur les boutons fraîchement créés
+    par `renderEpisodes()`, pas sur ceux déjà présents dans le DOM. */
+async function resolveEpisodePriority(number, { seek = null, sourceIndex = 0, autoplay = false } = {}) {
+  if (!player.anime || !player.season) return;
+  const token = player.token;
+  if (autoplay) player.pendingPlay = number;
+
+  if (player.resolvingEpisodes.has(number)) { renderEpisodes(episodesStatus()); return; }
+  player.resolvingEpisodes.add(number);
+  renderEpisodes(episodesStatus());
+
+  let result;
+  try {
+    result = await source.episode(player.anime, player.season.slug, player.version, number);
+  } catch (err) {
+    if (token !== player.token) return;
+    player.resolvingEpisodes.delete(number);
+    renderEpisodes(episodesStatus());
+    notify(`Impossible de résoudre l'épisode ${number} : ${describeError(err)}`,
+      { type: "error", title: "Épisode indisponible" });
+    return;
+  }
+  if (token !== player.token) return;
+  player.resolvingEpisodes.delete(number);
+
+  if (result.degraded) {
+    player.episodes = result.episodes;
+    player.episodeCount = result.episodes.length;
+  } else {
+    player.episodeCount = result.count;
+    if (result.episode) mergeEpisode(result.episode);
+  }
+  renderEpisodes(episodesStatus());
+
+  if (player.pendingPlay !== number) return;   // l'utilisateur a cliqué ailleurs entre-temps
+  player.pendingPlay = null;
+  const found = player.episodes.find((e) => e.number === number);
+  if (found) playResolvedEpisode(found, { seek, sourceIndex });
+  else notify(`L'épisode ${number} n'est pas disponible dans « ${player.season?.label ?? "cette saison"} » en ${player.version.toUpperCase()}.`,
+    { type: "error", title: "Épisode introuvable" });
 }
 
 function selectEpisode(number) {
@@ -1302,28 +1469,18 @@ function fillSources(episode) {
 }
 
 function playEpisode(number, { seek = null, sourceIndex = 0 } = {}) {
-  const episode = player.episodes.find((e) => e.number === Number(number));
-  if (!episode) {
+  const num = Number(number);
+  const episode = player.episodes.find((e) => e.number === num);
+  if (episode) { playResolvedEpisode(episode, { seek, sourceIndex }); return; }
+
+  // Pas encore résolu (chargement intelligent en cours) : on le demande en
+  // priorité au lieu d'échouer, pendant que le reste continue en fond.
+  if (player.episodeCount && (num < 0 || num >= player.episodeCount)) {
     notify(`L'épisode ${number} n'est pas disponible dans « ${player.season?.label ?? "cette saison"} » en ${player.version.toUpperCase()}.`,
       { type: "error", title: "Épisode introuvable" });
     return;
   }
-  player.episode = episode;
-  fillSources(episode);
-  sourceSelect.value = String(clamp(sourceIndex, 0, episode.sources.length - 1));
-  resumeBanner.hidden = true;
-
-  const entry = progressEntry(true);
-  entry.lastEpisode = episode.number;
-  entry.updatedAt = Date.now();
-  recordHistory(episode.number);
-  persist();
-
-  mountSource(episode.sources[Number(sourceSelect.value)] , { seek });
-  renderEpisodeStates();
-  updatePlayerHeader();
-  renderHistory();
-  renderContinue();
+  resolveEpisodePriority(num, { seek, sourceIndex, autoplay: true });
 }
 
 function teardown() {
@@ -1527,24 +1684,40 @@ function renderEpisodes(status, message = "", elapsed = 0) {
     return;
   }
 
-  episodeCount.textContent = String(player.episodes.length);
+  // « ok » : tout est connu, on affiche exactement ce qui a été résolu.
+  // « partial » (chargement intelligent) : le nombre total est connu mais pas
+  // encore chaque lien — les boutons non résolus restent cliquables, un clic
+  // déclenche leur résolution prioritaire (voir resolveEpisodePriority).
+  const total = status === "partial" ? player.episodeCount : player.episodes.length;
+  episodeCount.textContent = String(total);
   episodeCount.hidden = false;
+
+  const known = new Map(player.episodes.map((e) => [e.number, e]));
+  const numbers = status === "partial"
+    ? Array.from({ length: total }, (_, i) => i)
+    : player.episodes.map((e) => e.number);
 
   const entry = progressEntry(false);
   const fragment = document.createDocumentFragment();
-  for (const episode of player.episodes) {
-    const saved = entry?.episodes?.[episode.number];
+  for (const number of numbers) {
+    const episode = known.get(number);
+    const resolving = player.resolvingEpisodes.has(number);
+    const saved = entry?.episodes?.[number];
     const ratio = saved?.d ? clamp(saved.t / saved.d, 0, 1) : 0;
+
     const button = el("button", {
       type: "button",
-      class: "episode",
-      dataset: { episode: String(episode.number) },
-      onclick: () => playEpisode(episode.number, { seek: saved && !saved.done ? saved.t : null }),
+      class: `episode${resolving ? " is-resolving" : ""}${!episode && !resolving ? " is-unresolved" : ""}`,
+      dataset: { episode: String(number) },
+      "aria-busy": resolving ? "true" : null,
+      title: !episode && !resolving ? "Pas encore chargé : cliquer pour le résoudre" : null,
+      onclick: () => playEpisode(number, { seek: saved && !saved.done ? saved.t : null }),
     }, [
-      el("span", { class: "ep-num", text: String(episode.number) }),
-      el("span", { class: "ep-label", text: episode.label || `Épisode ${episode.number}` }),
-      saved?.done ? icon("check", "ep-check") : null,
-      ratio > 0.02 && ratio < 0.95 ? el("i", { class: "ep-bar", style: { width: `${ratio * 100}%` } }) : null,
+      el("span", { class: "ep-num", text: String(number) }),
+      el("span", { class: "ep-label", text: episode?.label || `Épisode ${number}` }),
+      resolving ? el("span", { class: "spinner spinner-sm ep-spinner", "aria-hidden": "true" }) : null,
+      episode && saved?.done ? icon("check", "ep-check") : null,
+      episode && ratio > 0.02 && ratio < 0.95 ? el("i", { class: "ep-bar", style: { width: `${ratio * 100}%` } }) : null,
     ]);
     fragment.append(button);
   }

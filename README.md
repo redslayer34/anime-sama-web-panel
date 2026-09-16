@@ -152,6 +152,9 @@ mesures s'y attaquent :
 - **Cache partagé de 6 heures.** Une saison déjà résolue est servie instantanément, à tous
   les visiteurs. Seul le tout premier chargement est long.
 
+Quatrième mesure, côté panel cette fois : le **chargement intelligent** (section 6)
+n'attend même plus cette résolution complète pour afficher quelque chose — voir plus bas.
+
 ### Lecture des vidéos : le relais
 
 Les hébergeurs vidéo (Sibnet, Vidmoly, SendVid…) n'envoient pas d'en-tête CORS et
@@ -287,7 +290,35 @@ du `<script>` par `hls.min.js`.
 
 ---
 
-## 6. Limites connues (côté navigateur, pas côté panel)
+## 6. Chargement intelligent des épisodes
+
+Ouvrir une saison ne résout plus tous ses épisodes avant d'afficher quoi que ce soit :
+le panel demande d'abord **un seul épisode** (celui repris depuis ta dernière position,
+ou le premier) et affiche tous les boutons numérotés dès que leur nombre est connu — un
+aller-retour bien plus rapide que la résolution vidéo elle-même, puisqu'il ne demande que
+de scraper la page de la saison, pas d'interroger chaque hébergeur. Le reste de la saison
+continue de se résoudre en tâche de fond (le même appel qu'avant, simplement non
+bloquant), et remplit les boutons restants au fur et à mesure.
+
+Cliquer un épisode pas encore résolu (grisé, « non résolu ») le demande à son tour en
+priorité : un court instant de résolution, puis la lecture démarre. Rien à configurer.
+
+Concrètement :
+
+- **Premier chargement d'une saison jamais visitée** : les boutons apparaissent en
+  quelques secondes ; l'épisode ciblé est jouable presque aussitôt ; le reste arrive tout
+  seul, sans bloquer la navigation.
+- **Saison déjà en cache serveur** (visitée récemment, par toi ou un autre visiteur sur un
+  panel hébergé) : tout apparaît résolu immédiatement.
+- **Backend local non patché** (un clone brut d'AnimeSamaApi, lancé hors de l'image
+  Docker, sans passer par `docker/speedup_patch.py`) : le paramètre `e` est simplement
+  ignoré côté serveur, qui renvoie alors la saison déjà entière comme avant. Le panel
+  détecte cette réponse et s'y adapte automatiquement — aucune configuration, aucun
+  message d'erreur, juste l'ancien comportement (attente unique, tout d'un coup).
+
+---
+
+## 7. Limites connues (côté navigateur, pas côté panel)
 
 - **Hébergeurs vidéo.** `getAnimeLink` renvoie tantôt un fichier direct (MP4 / M3U8),
   tantôt une page de lecteur (Sibnet, Vidmoly, SendVid…). Les fichiers directs sont lus
@@ -303,21 +334,24 @@ du `<script>` par `hls.min.js`.
 - **Scans.** Les images sont servies par le CDN d'Anime-Sama, qui applique parfois une
   protection anti-hotlink. Le panel remplace alors chaque image manquante par un message
   explicite.
-- **Lenteur du premier appel.** `getAnimeLink` scrape la page à la volée : compte
-  plusieurs secondes. Le délai d'attente est réglable (45 s par défaut).
+- **Lenteur du tout premier appel à une saison jamais visitée.** `getAnimeLink` scrape
+  la page à la volée : compte quelques secondes pour un épisode (voir « Chargement
+  intelligent » plus haut), plus le temps que le reste de la saison termine en fond. Le
+  délai d'attente est réglable (45 s par défaut).
 
 ---
 
-## 7. Tests
+## 8. Tests
 
 ```bash
 python3 tests/run.py            # toute la campagne
 python3 tests/run.py --unit     # seulement les tests Python (aucune dépendance)
 ```
 
-Sept suites : deux en Python, cinq en navigateur via Playwright. Elles couvrent
+Neuf suites : deux en Python, sept en navigateur via Playwright. Elles couvrent
 le parcours complet du panel, le mot de passe, les tâches de fond et leur cache,
-la bannière d'indexation, le relais vidéo et l'équivalence du patch de
+la bannière d'indexation, le relais vidéo, le chargement intelligent (épisode
+prioritaire et dégradation sans patch), et l'équivalence du patch de
 parallélisation. Chacune démarre ses propres doublures de backend — **aucun test
 ne contacte Anime-Sama**.
 
@@ -329,7 +363,7 @@ Détail des suites et des conventions : [`tests/README.md`](tests/README.md).
 
 ---
 
-## 8. En cas de problème au démarrage
+## 9. En cas de problème au démarrage
 
 **`PermissionError: [WinError 10013]`** — le port est réservé par Windows (Hyper-V, WSL
 ou Docker s'en attribuent des plages entières, même sans rien écouter dessus). Le
@@ -353,7 +387,7 @@ démarrera tout seul au prochain lancement.
 
 ---
 
-## 9. Vie privée et usage
+## 10. Vie privée et usage
 
 Aucune donnée ne quitte ton navigateur : ni compte, ni télémétrie, ni requête vers un
 service tiers autre que le CDN de hls.js. Favoris, historique et progression vivent dans

@@ -1,11 +1,21 @@
 """
-Rend parallèle la résolution des épisodes d'AnimeSamaApi.
+Rend parallèle la résolution des épisodes d'AnimeSamaApi, et ajoute un mode
+« épisode prioritaire » pour le chargement intelligent du panel.
 
-Pourquoi : `Cardinal.getAnimeLink` résout les épisodes **l'un après l'autre**, et
-chaque épisode coûte une à trois requêtes HTTP de 3 à 10 secondes chez les
-hébergeurs vidéo. Une saison de 25 épisodes demande donc plusieurs minutes sur
-une petite instance, ce qui dépasse la patience de n'importe quel navigateur.
-Les épisodes étant indépendants, un pool de threads divise ce temps d'autant.
+Pourquoi (parallélisation) : `Cardinal.getAnimeLink` résout les épisodes **l'un
+après l'autre**, et chaque épisode coûte une à trois requêtes HTTP de 3 à 10
+secondes chez les hébergeurs vidéo. Une saison de 25 épisodes demande donc
+plusieurs minutes sur une petite instance, ce qui dépasse la patience de
+n'importe quel navigateur. Les épisodes étant indépendants, un pool de threads
+divise ce temps d'autant.
+
+Pourquoi (épisode prioritaire) : même parallélisée, une saison entière reste
+lente à charger avant que le premier épisode soit jouable. Le calcul du
+*nombre* d'épisodes, lui, ne coûte que deux requêtes bon marché (page de
+saison + fichier JS listant les liens bruts) — aucune résolution vidéo. Le
+panel peut donc afficher tous les boutons d'épisodes tout de suite, puis ne
+résoudre que celui choisi (`&e=N`) en quelques secondes, pendant que le reste
+de la saison continue en tâche de fond via l'appel habituel (sans `e`).
 
 Le patch est appliqué au moment du `docker build`, sur le commit d'AnimeSamaApi
 épinglé dans le Dockerfile. Chaque ancre doit se trouver **exactement une fois** :
@@ -111,6 +121,16 @@ PLAYABLE_NEW_2 = '''                r = _panel_scraper().get(test_link, headers=
 
 
 # ─────────────────────────────────────────────
+#  backend.py : signature — épisode prioritaire optionnel
+# ─────────────────────────────────────────────
+SIGNATURE_OLD = '''    def getAnimeLink(nom, saison=None, version=None): # Recupère les différents liens disponibles afin de retourner une playlist complète et prête à être téléchargée
+'''
+
+SIGNATURE_NEW = '''    def getAnimeLink(nom, saison=None, version=None, episode=None): # Recupère les différents liens disponibles afin de retourner une playlist complète et prête à être téléchargée
+'''
+
+
+# ─────────────────────────────────────────────
 #  backend.py : la boucle séquentielle devient un pool
 # ─────────────────────────────────────────────
 LOOP_OLD = '''        # Résolution épisode par épisode
@@ -202,6 +222,18 @@ LOOP_NEW = '''        # Résolution des épisodes en parallèle (patch du panel 
 
             return None
 
+        # Chargement intelligent du panel : un seul épisode demandé (&e=N côté
+        # API), résolu seul en quelques secondes au lieu d'attendre toute la
+        # saison. `nombre_episodes` est déjà connu à ce stade (scraping léger,
+        # sans résolution vidéo) : le panel peut donc dessiner tous les boutons
+        # d'épisodes avant même que celui-ci ait fini de se résoudre.
+        if episode is not None:
+            link = _panel_resolve(episode) if 0 <= episode < nombre_episodes else None
+            return {
+                "count": nombre_episodes,
+                "results": [{"episode": episode, "url": link}] if link else [],
+            }
+
         if nombre_episodes > 0:
             with _PanelPool(max_workers=min(_PANEL_WORKERS, nombre_episodes)) as pool:
                 # `map` conserve l'ordre des entrées : la numérotation des
@@ -220,6 +252,34 @@ LOOP_NEW = '''        # Résolution des épisodes en parallèle (patch du panel 
         return good_link'''
 
 
+# ─────────────────────────────────────────────
+#  api.py : la route lit et transmet le paramètre « e »
+# ─────────────────────────────────────────────
+API_ROUTE_OLD = '''    def getAnimeLink():
+        nom = request.args.get("n", "").strip()
+        saison = request.args.get("s", "").strip() # saison1 par défaut
+        version = request.args.get("v", "").strip() # version sera en vostfr par défaut
+
+        if not nom:
+            return jsonify({"error": "Paramètre \'n\' manquant"}), 400
+        
+        return jsonify(Cardinal.getAnimeLink(nom, saison, version))'''
+
+API_ROUTE_NEW = '''    def getAnimeLink():
+        nom = request.args.get("n", "").strip()
+        saison = request.args.get("s", "").strip() # saison1 par défaut
+        version = request.args.get("v", "").strip() # version sera en vostfr par défaut
+        # Patch du panel Anime-Sama : épisode prioritaire (chargement intelligent).
+        # Un « e » absent ou non numérique laisse le comportement d'origine.
+        episode_arg = request.args.get("e", "").strip()
+        episode = int(episode_arg) if episode_arg.isdigit() else None
+
+        if not nom:
+            return jsonify({"error": "Paramètre \'n\' manquant"}), 400
+        
+        return jsonify(Cardinal.getAnimeLink(nom, saison, version, episode))'''
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("Usage : python speedup_patch.py /chemin/vers/AnimeSamaApi")
@@ -227,7 +287,8 @@ def main():
 
     resolvers = root / "src" / "utils" / "resolvers.py"
     backend = root / "src" / "backend.py"
-    for path in (resolvers, backend):
+    api = root / "src" / "api.py"
+    for path in (resolvers, backend, api):
         if not path.is_file():
             raise SystemExit(f"Fichier introuvable : {path}")
 
@@ -240,12 +301,18 @@ def main():
     text = replace_once(text, BACKEND_HEADER_OLD, BACKEND_HEADER_NEW, "backend.py / en-tête")
     text = replace_once(text, PLAYABLE_OLD_1, PLAYABLE_NEW_1, "backend.py / is_stream_playable (1)")
     text = replace_once(text, PLAYABLE_OLD_2, PLAYABLE_NEW_2, "backend.py / is_stream_playable (2)")
+    text = replace_once(text, SIGNATURE_OLD, SIGNATURE_NEW, "backend.py / signature getAnimeLink")
     text = replace_once(text, LOOP_OLD, LOOP_NEW, "backend.py / boucle de résolution")
     ast.parse(text)
     io.open(backend, "w", encoding="utf-8").write(text)
 
+    text = io.open(api, encoding="utf-8").read()
+    text = replace_once(text, API_ROUTE_OLD, API_ROUTE_NEW, "api.py / route getAnimeLink")
+    ast.parse(text)
+    io.open(api, "w", encoding="utf-8").write(text)
+
     print(f"Résolution parallélisée ({WORKERS_DEFAULT} threads par défaut, "
-          "réglable avec PANEL_RESOLVER_WORKERS).")
+          "réglable avec PANEL_RESOLVER_WORKERS) ; épisode prioritaire disponible (&e=N).")
 
 
 if __name__ == "__main__":

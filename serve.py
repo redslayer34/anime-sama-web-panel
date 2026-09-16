@@ -372,6 +372,7 @@ class Jobs:
 
     lock = threading.Lock()
     running = {}      # clé -> instant de démarrage
+    events = {}       # clé -> threading.Event, posé quand le travail se termine
     results = {}      # clé -> (expiration, statut, type de contenu, corps)
 
     # Un échec n'est gardé que brièvement : il doit pouvoir être retenté vite,
@@ -381,6 +382,14 @@ class Jobs:
     # Une entrée périmée n'était retirée que si la même clé était redemandée :
     # sur un serveur qui tourne des semaines, le cache ne faisait que grossir.
     MAX_ENTRIES = 200
+
+    # Avant de répondre 202, on patiente un peu qu'un travail rapide (un seul
+    # épisode, quelques secondes) se termine dans cette même requête : sans
+    # ça, le panel attendrait toujours au moins un cycle de sondage complet
+    # (JOB_POLL côté client) même pour un travail déjà fini. Négligeable pour
+    # les tâches longues (une saison entière, des minutes), sur lesquelles ce
+    # court délai ne fait aucune différence perceptible.
+    LONG_POLL = 1.5
 
     @classmethod
     def _evict(cls):
@@ -407,23 +416,34 @@ class Jobs:
             cls.results.pop(key, None)
 
             started = cls.running.get(key)
-            if started is not None:
-                return "pending", time.time() - started
+            event = cls.events.get(key)
+            if started is None:
+                started = cls.running[key] = time.time()
+                event = cls.events[key] = threading.Event()
+                threading.Thread(target=cls._work, args=(key, base, timeout, event), daemon=True).start()
 
-            cls.running[key] = time.time()
+        # Hors du verrou : les autres requêtes (même clé ou non) ne sont pas
+        # bloquées pendant l'attente.
+        if event is not None:
+            event.wait(cls.LONG_POLL)
 
-        threading.Thread(target=cls._work, args=(key, base, timeout), daemon=True).start()
-        return "pending", 0.0
+        with cls.lock:
+            entry = cls.results.get(key)
+            if entry and time.time() < entry[0]:
+                return "done", entry
+            return "pending", time.time() - started
 
     @classmethod
-    def _work(cls, key, base, timeout):
+    def _work(cls, key, base, timeout, event):
         started = time.time()
         status, content_type, payload = fetch_upstream(base, key, timeout)
         ttl = CACHE_TTL if status == 200 else cls.ERROR_TTL
         with cls.lock:
             cls.running.pop(key, None)
+            cls.events.pop(key, None)
             cls.results[key] = (time.time() + ttl, status, content_type, payload)
             cls._evict()
+        event.set()
         say(f"Tâche {key.split('?')[0]} terminée en {round(time.time() - started)} s (HTTP {status}).")
 
 
