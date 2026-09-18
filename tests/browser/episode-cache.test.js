@@ -40,7 +40,11 @@ const SHOTS = process.env.SHOTS_DIR || "tests/screenshots";
     stored ? `${stored.episodes}/${stored.count}` : "rien");
 
   // ── Deuxième visite : plus rien ne doit partir sur le réseau ────────
+  // Le rechargement restaure la dernière vue via l'ancre, donc le lecteur :
+  // il faut revenir à la recherche avant de pouvoir s'en servir.
   await p.reload({ waitUntil: "networkidle" });
+  await p.click('[data-nav="discover"]');
+  await p.waitForSelector("#searchInput", { state: "visible", timeout: 5000 });
   calls = [];
   await p.fill("#searchInput", "Frieren");
   await p.press("#searchInput", "Enter");
