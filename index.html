@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" data-theme="dark" data-accent="violet">
+<html lang="fr" data-theme="dark" data-accent="ember">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,9 +7,17 @@
 <meta name="description" content="Panel web pour l'API Anime-Sama : recherche, lecteur vidéo HLS/MP4, favoris, historique, progression et lecteur de scans.">
 <meta name="referrer" content="no-referrer">
 <title>Anime-Sama · Panel</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237c5cff'/%3E%3Cpath d='M13 10l9 6-9 6z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23FF9142'/%3E%3Cpath d='M13 10.5l8.5 5.5-8.5 5.5z' fill='%231A0F06'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#0B0C0F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F4F5F8" media="(prefers-color-scheme: light)">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="stylesheet" href="style.css">
+<link rel="preload" href="styles/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="styles/fonts/sora-var.woff2" as="font" type="font/woff2" crossorigin>
+<!-- Ordre significatif : chaque feuille peut s'appuyer sur la précédente. -->
+<link rel="stylesheet" href="styles/tokens.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/components.css">
+<link rel="stylesheet" href="styles/views.css">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
 <script src="script.js" defer></script>
 </head>
@@ -39,8 +47,6 @@
   <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v6M15 3v6"/><path d="M6 9h12v3a6 6 0 01-12 0z"/><path d="M12 18v3"/></symbol>
   <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 000 18h1.5a2 2 0 001.6-3.2 2 2 0 011.6-3.2H19a2 2 0 002-2.2A9 9 0 0012 3z"/><circle cx="7.5" cy="12" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="14.5" cy="7.5" r="1"/></symbol>
 </svg>
-
-<div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
 
 <a class="skip-link" href="#main">Aller au contenu</a>
 
@@ -75,21 +81,44 @@
 
 <div class="app">
   <nav class="sidebar" aria-label="Navigation principale">
-    <button type="button" class="nav-item is-active" data-nav="discover"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Découvrir</span></button>
+    <button type="button" class="nav-item is-active" data-nav="discover"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Accueil</span></button>
     <button type="button" class="nav-item" data-nav="player"><svg aria-hidden="true"><use href="#i-play"/></svg><span>Lecteur</span></button>
-    <button type="button" class="nav-item" data-nav="favorites"><svg aria-hidden="true"><use href="#i-star"/></svg><span>Favoris</span><span class="nav-count" id="navFavCount" hidden>0</span></button>
+    <button type="button" class="nav-item" data-nav="favorites"><svg aria-hidden="true"><use href="#i-star"/></svg><span>Ma liste</span><span class="nav-count" id="navFavCount" hidden>0</span></button>
     <button type="button" class="nav-item" data-nav="history"><svg aria-hidden="true"><use href="#i-clock"/></svg><span>Historique</span></button>
     <button type="button" class="nav-item" data-nav="scans"><svg aria-hidden="true"><use href="#i-book"/></svg><span>Scans</span></button>
-    <button type="button" class="nav-item" data-nav="settings"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Paramètres</span></button>
+    <button type="button" class="nav-item" data-nav="settings"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Réglages</span></button>
   </nav>
 
   <main id="main" tabindex="-1">
 
     <!-- ══════════════════ DÉCOUVRIR ══════════════════ -->
     <section class="view is-active" id="view-discover" data-view="discover" aria-labelledby="h-discover">
+      <h1 id="h-discover" class="sr-only">Accueil</h1>
+
+      <!-- L'accueil n'est pas une vue à part : c'est l'état au repos de
+           celle-ci. Le héros et les rangées occupent la place de l'ancien
+           écran vide, et s'effacent dès qu'une recherche remplit la grille. -->
+      <div class="home" id="homeBlock" hidden>
+        <section class="hero" id="hero" aria-labelledby="heroTitle" hidden>
+          <div class="hero-bg" id="heroBg" aria-hidden="true"></div>
+          <div class="hero-tint" aria-hidden="true"></div>
+          <div class="hero-inner">
+            <div class="hero-poster" id="heroPoster" aria-hidden="true"></div>
+            <div class="hero-body">
+              <p class="hero-eyebrow" id="heroEyebrow">À la une</p>
+              <h2 class="hero-title" id="heroTitle">—</h2>
+              <p class="hero-sub" id="heroSub"></p>
+              <div class="hero-meta" id="heroMeta"></div>
+              <div class="hero-actions" id="heroActions"></div>
+            </div>
+          </div>
+        </section>
+        <div id="homeRails"></div>
+      </div>
+
       <div class="view-head">
         <div>
-          <h1 id="h-discover">Découvrir</h1>
+          <h2 class="section-title" id="catalogueTitle">Catalogue</h2>
           <p class="view-sub">Recherche floue côté API, ou filtrage instantané du catalogue complet mis en cache.</p>
         </div>
         <div class="view-actions">
@@ -321,7 +350,7 @@
     <section class="view" id="view-settings" data-view="settings" aria-labelledby="h-settings">
       <div class="view-head">
         <div>
-          <h1 id="h-settings">Paramètres</h1>
+          <h1 id="h-settings">Réglages</h1>
           <p class="view-sub">Tout est enregistré localement dans ce navigateur (<code>localStorage</code>).</p>
         </div>
       </div>
@@ -352,7 +381,7 @@
           <div class="field-group">
             <label for="themeSelect">Thème</label>
             <select id="themeSelect">
-              <option value="dark">Sombre (défaut)</option>
+              <option value="dark">Nocturne (défaut)</option>
               <option value="abyss">Abysse (noir OLED)</option>
               <option value="light">Clair</option>
             </select>
@@ -360,11 +389,11 @@
           <fieldset class="field-group">
             <legend>Couleur d'accentuation</legend>
             <div class="accent-row" id="accentRow" role="radiogroup" aria-label="Couleur d'accentuation">
-              <button type="button" class="accent" data-accent="violet" style="--sw:#7c5cff" role="radio" aria-checked="true" aria-label="Violet"></button>
-              <button type="button" class="accent" data-accent="cyan" style="--sw:#22d3ee" role="radio" aria-checked="false" aria-label="Cyan"></button>
-              <button type="button" class="accent" data-accent="rose" style="--sw:#fb5b8f" role="radio" aria-checked="false" aria-label="Rose"></button>
-              <button type="button" class="accent" data-accent="emerald" style="--sw:#2dd4a7" role="radio" aria-checked="false" aria-label="Émeraude"></button>
-              <button type="button" class="accent" data-accent="amber" style="--sw:#f5a524" role="radio" aria-checked="false" aria-label="Ambre"></button>
+              <button type="button" class="accent" data-accent="ember" style="--sw:#FF9142" role="radio" aria-checked="true" aria-label="Braise"></button>
+              <button type="button" class="accent" data-accent="cyan" style="--sw:#22C8E6" role="radio" aria-checked="false" aria-label="Cyan"></button>
+              <button type="button" class="accent" data-accent="rose" style="--sw:#FF7BA5" role="radio" aria-checked="false" aria-label="Rose"></button>
+              <button type="button" class="accent" data-accent="emerald" style="--sw:#2DD4A7" role="radio" aria-checked="false" aria-label="Émeraude"></button>
+              <button type="button" class="accent" data-accent="violet" style="--sw:#A08CFF" role="radio" aria-checked="false" aria-label="Violet"></button>
             </div>
           </fieldset>
           <label class="switch">

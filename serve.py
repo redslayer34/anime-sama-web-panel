@@ -85,6 +85,12 @@ CACHE_TTL = 6 * 3600
 # navigateur refuse donc de lire leurs flux depuis le panel. En passant par le
 # serveur, la lecture redevient une requête de même origine.
 STREAM_ROUTE = "/stream"
+
+# Route distincte pour les jaquettes. Elle pourrait passer par /stream, mais
+# les deux usages n'ont ni la même politique de cache (une affiche se garde,
+# un flux vidéo signé expire) ni le même volume, et les séparer garde le
+# réglage « relais vidéo » du panel fidèle à son intitulé.
+IMAGE_ROUTE = "/img"
 STREAM_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
              "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
 PLAYLIST_MAX = 4 * 1024 * 1024        # une playlist HLS dépasse rarement quelques Ko
@@ -100,6 +106,13 @@ STREAM_SAFE_TYPES = (
     "application/vnd.apple.mpegurl", "application/x-mpegurl",
     "application/dash+xml",
 )
+
+# Les jaquettes passent par le relais et sont redemandées à chaque défilement.
+# Sans cache, la grille les retélécharge en boucle — coûteux sur un hébergement
+# gratuit. La vidéo, elle, reste non stockée : flux volumineux, souvent derrière
+# des URLs signées à durée de vie courte.
+IMAGE_CACHE = "public, max-age=604800, immutable"
+IMAGE_MAX = 6 * 1024 * 1024   # une jaquette de catalogue pèse quelques dizaines de Ko
 
 
 def inert_type(content_type):
@@ -480,6 +493,8 @@ class PanelHandler(SimpleHTTPRequestHandler):
             return
         if path == STREAM_ROUTE:
             return self.serve_stream(body)
+        if path == IMAGE_ROUTE:
+            return self.serve_image(body)
         if path == "/panel/state":
             return self.send_state(body)
         if is_api_call(self.path):
@@ -497,6 +512,47 @@ class PanelHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
         return False
+
+    def serve_image(self, body=True):
+        """Relaie une jaquette : même garde-fou que le flux vidéo, mais on
+        n'accepte que des images et on autorise le cache du navigateur."""
+        params = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        target, refusal = stream_target((params.get("u") or [""])[0])
+        if refusal:
+            return self.send_payload(400, json.dumps({"error": refusal}).encode(), body=body)
+
+        origin = urllib.parse.urlsplit(target)
+        headers = {
+            "User-Agent": STREAM_UA,
+            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+            "Referer": f"{origin.scheme}://{origin.netloc}/",
+        }
+        try:
+            upstream = urllib.request.urlopen(
+                urllib.request.Request(target, headers=headers), timeout=15)
+        except Exception:
+            # Le panel dessine lui-même une affiche de repli : un 404 discret
+            # vaut mieux qu'un message d'erreur détaillé dans la console.
+            return self.send_payload(404, b"", "image/gif", body=body)
+
+        with upstream:
+            served = inert_type(upstream.headers.get("Content-Type", ""))
+            if not served.startswith("image/"):
+                return self.send_payload(415, b"", "image/gif", body=body)
+            payload = upstream.read(IMAGE_MAX)
+
+        self.send_response(200)
+        self.send_header("Content-Type", served)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", IMAGE_CACHE)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "sandbox")
+        self.end_headers()
+        if body:
+            try:
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def serve_stream(self, body=True):
         """Relaie un flux vidéo, en réécrivant les playlists HLS au passage."""
@@ -537,12 +593,15 @@ class PanelHandler(SimpleHTTPRequestHandler):
                 return self.send_payload(200, payload, "application/vnd.apple.mpegurl", body)
 
             self.send_response(upstream.status)
-            self.send_header("Content-Type", inert_type(content_type))
+            served_type = inert_type(content_type)
+            self.send_header("Content-Type", served_type)
             for name in ("Content-Length", "Content-Range", "Accept-Ranges"):
                 value = upstream.headers.get(name)
                 if value:
                     self.send_header(name, value)
-            self.send_header("Cache-Control", "no-store")
+            self.send_header(
+                "Cache-Control",
+                IMAGE_CACHE if served_type.startswith("image/") else "no-store")
             # Double garde-fou : pas de reniflage de type, et exécution
             # impossible même si un HTML passait à travers.
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -683,6 +742,10 @@ def main():
 
     if not (ROOT / "index.html").is_file():
         sys.exit(f"index.html est introuvable dans {ROOT}")
+    # Sans les feuilles de style, la page s'affiche mais sans aucune mise en
+    # forme — un échec silencieux, et difficile à diagnostiquer à distance.
+    if not (ROOT / "styles" / "tokens.css").is_file():
+        sys.exit(f"le dossier styles/ est introuvable dans {ROOT}")
 
     say("Panel Anime-Sama")
     say("─" * 46)

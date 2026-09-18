@@ -2,3 +2,10 @@ __pycache__/
 *.py[cod]
 .DS_Store
 tests/screenshots/
+
+# Playwright s'installe à la demande pour les suites navigateur (voir
+# tests/README.md). Le projet lui-même reste sans dépendance : ces fichiers
+# sont des artefacts locaux, pas une partie du dépôt.
+node_modules/
+package.json
+package-lock.json

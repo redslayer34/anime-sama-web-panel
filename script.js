@@ -19,7 +19,9 @@
 const panelServer = { relay: false };
 
 const STORE_KEY     = "animeSamaPanel.v1";
-const CATALOGUE_KEY = "animeSamaPanel.catalogue.v1";
+// .v2 : le cache .v1 a été écrit par une version qui jetait les jaquettes.
+// Changer de clé force un rafraîchissement plutôt qu'une grille d'affiches vides.
+const CATALOGUE_KEY = "animeSamaPanel.catalogue.v2";
 const LEGACY_KEY    = "animeWebPlayer.v3";          // ancien panel mono-fichier
 const SVG_NS        = "http://www.w3.org/2000/svg";
 
@@ -42,7 +44,7 @@ const DEFAULT_SETTINGS = {
   api: "",
   timeout: 45,
   theme: "dark",
-  accent: "violet",
+  accent: "ember",
   motion: false,
   compact: false,
   version: "vostfr",
@@ -68,6 +70,9 @@ function el(tag, props = {}, children = []) {
     else if (key === "text") node.textContent = String(value);
     else if (key === "dataset") Object.assign(node.dataset, value);
     else if (key === "style") Object.assign(node.style, value);
+    // Object.assign ne sait pas poser une propriété personnalisée
+    // (`--g1`) : il faut passer par setProperty.
+    else if (key === "vars") for (const [name, v] of Object.entries(value)) node.style.setProperty(name, v);
     else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2), value);
     else if (value === true) node.setAttribute(key, "");
     else node.setAttribute(key, String(value));
@@ -126,6 +131,122 @@ function relayUrl(url) {
   const safe = safeUrl(url);
   if (!safe) return null;
   return new URL(`stream?u=${encodeURIComponent(safe)}`, location.href).href;
+}
+
+/* ─────────────────────────────────────────────
+   2 bis. Jaquettes
+
+   Le catalogue amont fournit une URL d'affiche pour chaque fiche. Trois
+   obstacles séparent cette URL d'une image à l'écran, d'où la chaîne de
+   repli ci-dessous :
+     1. l'hébergeur refuse souvent une requête sans Referer cohérent — et
+        la page impose `referrer: no-referrer` ;
+     2. le CDN peut être filtré par le réseau de l'utilisateur ;
+     3. certaines fiches n'ont tout simplement pas d'image.
+   On tente donc l'URL directe, puis le relais du serveur (qui ajoute le
+   Referer et ramène tout à la même origine), puis une affiche dessinée.
+   L'échec d'une origine est retenu : une seule image paie le détour.
+   ───────────────────────────────────────────── */
+
+/** Route image du serveur. Distincte du relais vidéo : les tests du relais
+    comptent les appels à /stream, et la politique de cache n'est pas la
+    même — une affiche se garde, un flux vidéo signé non. */
+function imageProxyUrl(url) {
+  if (!panelServer.relay || location.protocol === "file:") return null;
+  const safe = safeUrl(url);
+  if (!safe) return null;
+  return new URL(`img?u=${encodeURIComponent(safe)}`, location.href).href;
+}
+
+const coverMemo = new Map();      // id d'anime → URL retenue, évite de renégocier à chaque rendu
+const brokenOrigins = new Set();  // origines dont le chargement direct a échoué
+
+/** Teinte stable déduite du titre : deux séries n'ont jamais la même, et
+    la même série garde la sienne d'une session à l'autre. */
+function titleHue(text) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  return hash % 360;
+}
+
+/** Mémorise la jaquette d'une fiche pour les vues qui ne stockent que du
+    texte (favoris, historique, reprises). */
+function rememberCover(anime) {
+  if (!anime?.id || !anime.cover) return;
+  if (state.covers[anime.id] === anime.cover) return;
+  state.covers[anime.id] = anime.cover;
+  const keys = Object.keys(state.covers);
+  if (keys.length > COVERS_MAX) {
+    for (const key of keys.slice(0, keys.length - COVERS_MAX)) delete state.covers[key];
+  }
+  persist();
+}
+
+function coverFor(anime) {
+  if (!anime) return null;
+  return anime.cover || state.covers[anime.id] || null;
+}
+
+/** Remplace l'image par l'affiche dessinée, sans jamais laisser une image
+    cassée à l'écran. */
+function paintFallback(box, title) {
+  const hue = titleHue(title || "?");
+  box.querySelector(".poster-img")?.remove();
+  if (box.querySelector(".poster-gen")) return;
+  box.prepend(el("div", {
+    class: "poster-gen",
+    vars: {
+      "--g1": `hsl(${hue} 52% 32%)`,
+      "--g2": `hsl(${(hue + 38) % 360} 46% 12%)`,
+    },
+  }, el("span", { text: title || "Sans titre" })));
+}
+
+/** Construit la boîte d'affiche : ratio figé, chargement différé, repli
+    automatique. `extra` reçoit les surcouches (voile, actions, barre). */
+function posterBox(anime, { className = "", eager = false, extra = [] } = {}) {
+  const title = anime?.title || "";
+  const box = el("div", { class: className ? `poster ${className}` : "poster" });
+  const direct = coverFor(anime);
+
+  if (direct) {
+    const memo = coverMemo.get(anime.id);
+    let origin = "";
+    try { origin = new URL(direct).origin; } catch { /* URL relative */ }
+    const first = memo || (origin && brokenOrigins.has(origin) ? imageProxyUrl(direct) : direct);
+
+    if (first) {
+      const img = el("img", {
+        class: "poster-img",
+        src: first,
+        alt: "",
+        loading: eager ? "eager" : "lazy",
+        decoding: "async",
+        onerror: () => {
+          // Première déconvenue : on retente par le serveur, qui ajoute le
+          // Referer attendu. Seconde : on dessine.
+          const proxied = imageProxyUrl(direct);
+          if (img.dataset.stage !== "proxy" && proxied && img.src !== proxied) {
+            if (origin) brokenOrigins.add(origin);
+            img.dataset.stage = "proxy";
+            img.src = proxied;
+            return;
+          }
+          coverMemo.delete(anime.id);
+          paintFallback(box, title);
+        },
+        onload: () => { if (anime?.id) coverMemo.set(anime.id, img.src); },
+      });
+      box.append(img);
+    } else {
+      paintFallback(box, title);
+    }
+  } else {
+    paintFallback(box, title);
+  }
+
+  for (const node of extra) if (node) box.append(node);
+  return box;
 }
 
 function formatTime(seconds) {
@@ -191,8 +312,16 @@ const state = {
   favorites: [],
   history: [],
   progress: {},
+  // Jaquettes retenues par identifiant d'anime. Favoris, historique et
+  // reprises ne stockent que du texte : sans ce répertoire, les trois
+  // surfaces où l'on juge une plateforme n'auraient aucune image. On n'y
+  // écrit que ce que l'utilisateur touche vraiment, pas les 4000 fiches
+  // du catalogue.
+  covers: {},
   meta: { migrated: false },
 };
+
+const COVERS_MAX = 600;
 
 function loadState() {
   let parsed = null;
@@ -202,6 +331,7 @@ function loadState() {
     state.favorites = Array.isArray(parsed.favorites) ? parsed.favorites : [];
     state.history   = Array.isArray(parsed.history) ? parsed.history : [];
     state.progress  = (parsed.progress && typeof parsed.progress === "object") ? parsed.progress : {};
+    state.covers    = (parsed.covers && typeof parsed.covers === "object") ? parsed.covers : {};
     state.meta      = { migrated: false, ...(parsed.meta || {}) };
   }
   state.settings.timeout = clamp(Number(state.settings.timeout) || 45, 3, 600);
@@ -274,6 +404,7 @@ function persistNow() {
     favorites: state.favorites,
     history: state.history,
     progress: state.progress,
+    covers: state.covers,
     meta: state.meta,
   }));
 }
@@ -325,8 +456,9 @@ const modalFoot  = $("#modalFoot");
 
 let modalGeneration = 0;
 
-function openModal({ title, body, actions = [] }) {
+function openModal({ title, body, actions = [], variant = "" }) {
   modalGeneration++;
+  modal.dataset.variant = variant;
   modalTitle.textContent = title;
   clear(modalBody);
   modalBody.append(body instanceof Node ? body : el("p", { text: String(body) }));
@@ -487,7 +619,7 @@ function animeIdFrom(title, url) {
 function normAnime(raw, index = 0) {
   if (typeof raw === "string") {
     const title = raw.trim();
-    return title ? { id: slugify(title), title, alt: "", url: null, score: null, index } : null;
+    return title ? { id: slugify(title), title, alt: "", url: null, cover: null, score: null, index } : null;
   }
   if (!raw || typeof raw !== "object") return null;
   const title = String(pick(raw, ["title", "Title", "name", "nom", "matchedTitle"]) ?? "").trim();
@@ -500,6 +632,9 @@ function normAnime(raw, index = 0) {
     title: title || "Sans titre",
     alt: Array.isArray(alt) ? alt.join(", ") : (alt ? String(alt) : ""),
     url,
+    // Le catalogue amont porte l'affiche de chaque fiche ; sans cette ligne
+    // elle était simplement jetée ici, d'où une interface sans aucune image.
+    cover: safeUrl(pick(raw, ["cover", "Cover", "image", "img", "affiche", "poster"])),
     score: Number.isFinite(score) ? Math.round(score) : null,
     index,
   };
@@ -516,10 +651,11 @@ function seasonSlug(label, url) {
 }
 
 function normSeason(raw, index = 0) {
-  if (typeof raw === "string") return { label: raw, url: null, slug: seasonSlug(raw, null) };
+  if (typeof raw === "string") return { label: raw, url: null, cover: null, slug: seasonSlug(raw, null) };
   const label = String(pick(raw, ["Saison", "saison", "season", "name", "title"]) ?? `Saison ${index + 1}`).trim();
   const url = safeUrl(pick(raw, ["url", "lien", "link"]));
-  return { label: label || `Saison ${index + 1}`, url, slug: seasonSlug(label, url) };
+  const cover = safeUrl(pick(raw, ["cover", "Cover", "image", "img", "affiche", "poster"]));
+  return { label: label || `Saison ${index + 1}`, url, cover, slug: seasonSlug(label, url) };
 }
 
 function collectUrls(item) {
@@ -753,8 +889,16 @@ const searchInput     = $("#searchInput");
 
 const discover = { items: [], origin: "idle", limit: 60, message: "" };
 
-function emptyState({ glyph = "info", title, text, tone = "", action = null }) {
-  return el("div", { class: "empty", dataset: tone ? { tone } : {} }, [
+/** Seule primitive d'état vide du panel. Elle est utilisée dans six
+    conteneurs dont certains sont comptés par les tests : elle ne doit
+    jamais porter .card ni .row. La variante compacte évite d'avoir à
+    créer un second composant — qui serait justement l'occasion
+    d'introduire une de ces classes par accident. */
+function emptyState({ glyph = "info", title, text, tone = "", action = null, size = "" }) {
+  const dataset = {};
+  if (tone) dataset.tone = tone;
+  if (size) dataset.size = size;
+  return el("div", { class: "empty", dataset }, [
     icon(glyph),
     el("p", { class: "empty-title", text: title }),
     text ? el("p", { class: "empty-text", text }) : null,
@@ -770,14 +914,42 @@ function toggleFavorite(anime) {
     state.favorites.splice(index, 1);
     notify(`« ${anime.title} » retiré des favoris.`, { type: "info", timeout: 3200 });
   } else {
-    state.favorites.unshift({ id: anime.id, title: anime.title, url: anime.url || null, addedAt: Date.now() });
+    state.favorites.unshift({
+      id: anime.id, title: anime.title, url: anime.url || null,
+      cover: coverFor(anime), addedAt: Date.now(),
+    });
     notify(`« ${anime.title} » ajouté aux favoris.`, { type: "success", timeout: 3200 });
   }
+  rememberCover(anime);
   persist();
   renderFavorites();
-  renderDiscover();
+  // Reconstruire toute la grille rechargerait chaque affiche et ferait
+  // clignoter la page. On ne le fait que si le filtre « favoris
+  // uniquement » est actif, car la carte doit alors disparaître.
+  if (favOnlyToggle.checked) renderDiscover();
+  else {
+    refreshFavMarks();
+    // La rangée « Ma liste » doit refléter l'ajout tout de suite. Les
+    // affiches déjà résolues sont mémoïsées, la reconstruction ne
+    // relance donc aucun téléchargement.
+    if (discover.origin === "idle") renderHome();
+  }
   updateFavCount();
   updatePlayerFavButton();
+}
+
+/** Met à jour les étoiles déjà à l'écran sans reconstruire les cartes. */
+function refreshFavMarks() {
+  for (const button of $$(".card-fav")) {
+    const id = button.dataset.favFor;
+    if (!id) continue;
+    const active = isFavorite(id);
+    button.classList.toggle("is-on", active);
+    button.setAttribute("aria-pressed", String(active));
+    const label = active ? "Retirer des favoris" : "Ajouter aux favoris";
+    button.setAttribute("title", label);
+    button.setAttribute("aria-label", label);
+  }
 }
 
 function updateFavCount() {
@@ -800,6 +972,7 @@ function favButton(anime) {
   const active = isFavorite(anime.id);
   return el("button", {
     type: "button",
+    dataset: { favFor: anime.id },
     class: `icon-btn icon-btn-sm card-fav${active ? " is-on" : ""}`,
     "aria-pressed": String(active),
     title: active ? "Retirer des favoris" : "Ajouter aux favoris",
@@ -808,35 +981,59 @@ function favButton(anime) {
   }, icon("star"));
 }
 
+/** Carte d'anime, pilotée par l'affiche.
+
+    Trois règles de structure, imposées par les suites de tests et par la
+    façon dont un clic automatisé vise le centre d'un élément :
+      · le bouton de lecture est le PREMIER .btn-primary du sous-arbre ;
+      · .card-fav est un descendant, et rien ne le recouvre — le voile
+        dégradé est en `pointer-events: none` ;
+      · les actions restent présentes et cliquables en permanence, elles
+        ne font que se renforcer au survol. */
 function animeCard(anime) {
   const progress = latestProgress(anime.id);
+  const resume = progress
+    ? { seasonSlug: progress.seasonSlug, version: progress.version, episode: progress.lastEpisode }
+    : {};
   const chips = [];
   if (Number.isFinite(anime.score)) chips.push(el("span", { class: "chip chip-sm", text: `Score ${anime.score}` }));
   if (progress) chips.push(el("span", { class: "chip chip-sm chip-accent", text: `${progress.seasonLabel} · É${progress.lastEpisode}` }));
-  if (isFavorite(anime.id)) chips.push(el("span", { class: "chip chip-sm chip-ok", text: "Favori" }));
 
-  return el("article", { class: "card" }, [
-    el("div", { class: "card-top" }, [
-      el("div", { style: { minWidth: "0", flex: "1" } }, [
-        el("h3", { class: "card-title", text: anime.title }),
-        anime.alt ? el("p", { class: "card-sub", text: anime.alt }) : null,
+  const ratio = progress ? watchedRatio(progress) : 0;
+  const poster = posterBox(anime, {
+    extra: [
+      el("div", { class: "poster-scrim", "aria-hidden": "true" }),
+      el("div", { class: "poster-actions" }, [
+        el("button", {
+          type: "button", class: "btn btn-primary btn-sm btn-icon",
+          title: progress ? "Reprendre" : "Ouvrir",
+          "aria-label": `${progress ? "Reprendre" : "Ouvrir"} ${anime.title}`,
+          onclick: () => openAnime(anime, resume),
+        }, icon("play")),
+        el("button", {
+          type: "button", class: "icon-btn icon-btn-sm card-info",
+          title: "Fiche détaillée", "aria-label": `Fiche de ${anime.title}`,
+          onclick: () => showAnimeDetails(anime),
+        }, icon("info")),
       ]),
       favButton(anime),
-    ]),
+      ratio > 0 ? el("div", { class: "poster-bar" }, el("i", { style: { width: `${ratio * 100}%` } })) : null,
+    ],
+  });
+
+  return el("article", { class: "card", dataset: { id: anime.id } }, [
+    poster,
+    el("h3", { class: "card-title", text: anime.title }),
+    anime.alt ? el("p", { class: "card-sub", text: anime.alt }) : null,
     chips.length ? el("div", { class: "card-meta" }, chips) : null,
-    el("div", { class: "card-actions" }, [
-      el("button", {
-        type: "button", class: "btn btn-primary btn-sm",
-        onclick: () => openAnime(anime, progress
-          ? { seasonSlug: progress.seasonSlug, version: progress.version, episode: progress.lastEpisode }
-          : {}),
-      }, [icon("play"), el("span", { text: progress ? "Reprendre" : "Ouvrir" })]),
-      el("button", {
-        type: "button", class: "btn btn-ghost btn-sm",
-        onclick: () => showAnimeDetails(anime),
-      }, "Détails"),
-    ]),
   ]);
+}
+
+/** Part regardée de l'épisode en cours, pour le liseré de reprise. */
+function watchedRatio(entry) {
+  const saved = entry?.episodes?.[entry.lastEpisode];
+  if (!saved?.d) return saved?.done ? 1 : 0;
+  return clamp(saved.t / saved.d, 0, 1);
 }
 
 function filteredDiscover() {
@@ -855,12 +1052,206 @@ function filteredDiscover() {
   return sorted;
 }
 
+/* ─────────────────────────────────────────────
+   6 bis. Accueil : héros et rangées
+
+   Ce n'est pas une vue séparée mais l'état au repos de « Découvrir ».
+   L'ancien écran vide invitait à taper une recherche — la pire entrée en
+   matière possible. Il est remplacé par ce que l'utilisateur a déjà :
+   ce qu'il regarde, sa liste, et de quoi explorer.
+   ───────────────────────────────────────────── */
+const homeBlock   = $("#homeBlock");
+const hero        = $("#hero");
+const heroBg      = $("#heroBg");
+const heroPoster  = $("#heroPoster");
+const heroEyebrow = $("#heroEyebrow");
+const heroTitle   = $("#heroTitle");
+const heroSub     = $("#heroSub");
+const heroMeta    = $("#heroMeta");
+const heroActions = $("#heroActions");
+const homeRails   = $("#homeRails");
+
+/** Réservoir de fiches pour l'accueil : la liste affichée si elle existe,
+    sinon le catalogue mis en cache, qu'on lit une seule fois. */
+let cataloguePool = null;
+function homePool() {
+  if (discover.items.length) return discover.items;
+  if (cataloguePool === null) cataloguePool = readCatalogueCache()?.items || [];
+  return cataloguePool;
+}
+
+/** Reprises les plus récentes, transformées en fiches présentables. */
+function continueEntries(limit = 12) {
+  return Object.values(state.progress)
+    .filter((entry) => entry.lastEpisode != null)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .slice(0, limit);
+}
+
+function animeFromProgress(entry) {
+  return {
+    id: entry.animeId, title: entry.title, alt: "",
+    url: entry.animeUrl || null, cover: state.covers[entry.animeId] || null,
+    score: null, index: 0,
+  };
+}
+
+function animeFromFavorite(fav) {
+  return {
+    id: fav.id, title: fav.title, alt: "",
+    url: fav.url || null, cover: fav.cover || state.covers[fav.id] || null,
+    score: null, index: 0,
+  };
+}
+
+/** Choix stable dans la journée : la sélection « au hasard » ne doit pas
+    se réordonner à chaque rendu, sinon la page semble instable. */
+function daySeed() {
+  const now = new Date();
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+function pickSpread(items, count) {
+  if (items.length <= count) return items.slice();
+  const step = Math.max(1, Math.floor(items.length / count));
+  const start = daySeed() % step;
+  const out = [];
+  for (let i = start; i < items.length && out.length < count; i += step) out.push(items[i]);
+  return out;
+}
+
+function renderHero() {
+  const resume = continueEntries(1)[0];
+  const pool = homePool();
+  let featured = null;
+  let eyebrow = "À la une";
+
+  if (resume) {
+    featured = animeFromProgress(resume);
+    eyebrow = "Reprendre";
+  } else if (pool.length) {
+    featured = pool.find((a) => a.cover) || pool[daySeed() % pool.length];
+  }
+
+  if (!featured) { hero.hidden = true; return null; }
+  hero.hidden = false;
+
+  // Le catalogue ne donne que des affiches 2/3 : la même image, floutée et
+  // agrandie, tient lieu de panoramique. La teinte vient du titre, donc
+  // elle est disponible même quand l'image ne l'est pas.
+  const cover = coverFor(featured);
+  heroBg.style.backgroundImage = cover ? `url("${cover.replace(/["\\]/g, "\\$&")}")` : "";
+  hero.style.setProperty("--hero-tint", `hsl(${titleHue(featured.title)} 60% 42% / .30)`);
+
+  clear(heroPoster);
+  heroPoster.append(posterBox(featured, { eager: true }));
+
+  heroEyebrow.textContent = eyebrow;
+  heroTitle.textContent = featured.title;
+  heroSub.textContent = resume
+    ? `${resume.seasonLabel} · Épisode ${resume.lastEpisode} · ${String(resume.version).toUpperCase()}`
+    : (featured.alt || "");
+  heroSub.hidden = !heroSub.textContent;
+
+  clear(heroMeta);
+  if (Number.isFinite(featured.score)) {
+    heroMeta.append(el("span", { class: "chip chip-sm", text: `Score ${featured.score}` }));
+  }
+  if (isFavorite(featured.id)) {
+    heroMeta.append(el("span", { class: "chip chip-sm chip-ok", text: "Dans ma liste" }));
+  }
+
+  clear(heroActions);
+  heroActions.append(el("button", {
+    type: "button", class: "btn btn-primary",
+    onclick: () => openAnime(featured, resume
+      ? { seasonSlug: resume.seasonSlug, version: resume.version, episode: resume.lastEpisode }
+      : {}),
+  }, [icon("play"), el("span", { text: resume ? "Reprendre" : "Regarder" })]));
+  heroActions.append(el("button", {
+    type: "button", class: "btn btn-ghost",
+    onclick: () => showAnimeDetails(featured),
+  }, [icon("info"), el("span", { text: "Détails" })]));
+
+  return featured;
+}
+
+/** Rangée horizontale : défilement confiné, flèches au survol, et un pas
+    calé sur la largeur visible plutôt que sur un nombre de cartes. */
+function buildRail(title, items, note = "") {
+  if (!items.length) return null;
+
+  const track = el("div", { class: "rail-track" });
+  for (const anime of items) track.append(animeCard(anime));
+
+  const scrollBy = (dir) => track.scrollBy({
+    left: dir * Math.max(240, track.clientWidth * 0.8),
+    behavior: state.settings.motion ? "auto" : "smooth",
+  });
+
+  const prev = el("button", {
+    type: "button", class: "rail-arrow", dataset: { dir: "prev" },
+    "aria-label": `${title} : défiler vers la gauche`,
+    onclick: () => scrollBy(-1),
+  }, icon("prev"));
+  const next = el("button", {
+    type: "button", class: "rail-arrow", dataset: { dir: "next" },
+    "aria-label": `${title} : défiler vers la droite`,
+    onclick: () => scrollBy(1),
+  }, icon("next"));
+
+  const sync = () => {
+    const max = track.scrollWidth - track.clientWidth - 1;
+    prev.disabled = track.scrollLeft <= 0;
+    next.disabled = track.scrollLeft >= max;
+  };
+  track.addEventListener("scroll", sync, { passive: true });
+  requestAnimationFrame(sync);
+
+  return el("section", { class: "rail-section" }, [
+    el("div", { class: "rail-head" }, [
+      el("h2", { text: title }),
+      note ? el("p", { class: "hint", text: note }) : null,
+    ]),
+    el("div", { class: "rail" }, [prev, track, next]),
+  ]);
+}
+
+function renderHome() {
+  // L'accueil cède la place dès qu'une recherche ou le catalogue remplit
+  // la grille : une seule surface à la fois, jamais les deux.
+  if (discover.origin !== "idle") { homeBlock.hidden = true; return; }
+
+  const featured = renderHero();
+  const pool = homePool();
+
+  clear(homeRails);
+  const scored = pool.filter((a) => Number.isFinite(a.score)).sort((a, b) => b.score - a.score);
+  const rails = [
+    buildRail("Reprendre la lecture", continueEntries().map(animeFromProgress)),
+    buildRail("Ma liste", state.favorites.slice(0, 16).map(animeFromFavorite)),
+    buildRail("Populaires", scored.slice(0, 16)),
+    buildRail("Dans le catalogue", pool.slice(0, 16),
+      pool.length ? `${pool.length} fiches en mémoire` : ""),
+    // Inutile de proposer une sélection « au hasard » quand le catalogue
+    // tient en une rangée : ce serait deux fois la même chose.
+    pool.length >= 40 ? buildRail("Au hasard", pickSpread(pool, 16)) : null,
+  ].filter(Boolean);
+
+  for (const rail of rails) homeRails.append(rail);
+  homeBlock.hidden = !featured && !rails.length;
+}
+
 function renderDiscover() {
   clear(discoverResults);
+  // L'accueil n'occupe l'écran que tant que la grille n'a rien à montrer.
+  renderHome();
 
   if (discover.origin === "loading") {
     resultCount.textContent = "…";
-    for (let i = 0; i < 8; i++) discoverResults.append(el("div", { class: "skeleton" }));
+    // Le squelette prend exactement la forme d'une affiche : la boîte est
+    // réservée à l'avance, donc aucun saut quand les cartes arrivent.
+    for (let i = 0; i < 12; i++) discoverResults.append(el("div", { class: "skeleton skeleton-poster" }));
     return;
   }
 
@@ -877,8 +1268,10 @@ function renderDiscover() {
     resultCount.textContent = "—";
     discoverResults.append(emptyState({
       glyph: "compass",
-      title: "Lance une recherche",
+      size: "compact",
+      title: "Parcourir le catalogue",
       text: "Saisis un titre pour interroger l'API, ou charge le catalogue complet pour filtrer les 4000+ fiches hors ligne.",
+      action: { label: "Charger le catalogue", onClick: () => loadCatalogueBtn.click() },
     }));
     return;
   }
@@ -903,7 +1296,7 @@ function renderDiscover() {
   discoverResults.append(fragment);
 
   if (items.length > slice.length) {
-    discoverResults.append(el("div", { class: "empty", style: { padding: "20px" } }, [
+    discoverResults.append(el("div", { class: "empty load-more" }, [
       el("p", { class: "empty-text", text: `${slice.length} titres affichés sur ${items.length}.` }),
       el("button", {
         type: "button", class: "btn btn-ghost",
@@ -958,6 +1351,11 @@ sortSelect.addEventListener("change", renderDiscover);
 favOnlyToggle.addEventListener("change", renderDiscover);
 
 /* ── Catalogue complet (route loadBaseAnimeData) ── */
+// Le catalogue mis en cache par les versions précédentes a été normalisé
+// sans les jaquettes. La clé a changé ; l'ancienne, qui pouvait peser
+// jusqu'à 3 Mo, resterait sinon orpheline pour toujours.
+safeStorage.remove("animeSamaPanel.catalogue.v1");
+
 function readCatalogueCache() {
   try {
     const raw = JSON.parse(safeStorage.get(CATALOGUE_KEY) || "null");
@@ -974,8 +1372,7 @@ async function fetchCatalogue() {
     const items = await source.catalogue();
     if (!items.length) throw new ApiError("Le catalogue renvoyé est vide. Lance d'abord l'indexation via /api/getAllAnime (3 à 5 minutes).", "empty");
     showCatalogue(items);
-    const payload = JSON.stringify({ at: Date.now(), items });
-    if (payload.length < CATALOGUE_MAX) safeStorage.set(CATALOGUE_KEY, payload);
+    writeCatalogueCache(items);
     notify(`${items.length} titres chargés et mis en cache.`, { type: "success", title: "Catalogue complet" });
     setApiStatus(source.isDemo ? "demo" : "online");
   } catch (err) {
@@ -987,6 +1384,34 @@ async function fetchCatalogue() {
     if (state?.indexing) pollIndexing();     // le serveur s'en charge déjà
     else offerIndexing();
   }
+}
+
+function writeCatalogueCache(items) {
+  const payload = JSON.stringify({ at: Date.now(), items });
+  if (payload.length < CATALOGUE_MAX) safeStorage.set(CATALOGUE_KEY, payload);
+}
+
+/** Remplit l'accueil au tout premier lancement.
+
+    Sans catalogue en mémoire, le héros et les rangées n'ont rien à
+    montrer et le site s'ouvre sur un écran vide — précisément ce que
+    cette refonte cherche à supprimer. On récupère donc le catalogue en
+    tâche de fond, sans toucher ni à la grille, ni à la navigation, ni au
+    statut affiché : un échec passe inaperçu, l'accueil se contente alors
+    de ce qu'il a. */
+async function warmHomeCatalogue() {
+  if (state.settings.demo || readCatalogueCache()) return;
+  // Pendant une indexation serveur, le catalogue est vide par définition :
+  // le demander ne ferait qu'ajouter du bruit. La bannière d'indexation
+  // s'en charge, et le catalogue sera rechargé à la fin.
+  if (indexing.seen) return;
+  try {
+    const items = await source.catalogue();
+    if (!items.length) return;
+    writeCatalogueCache(items);
+    cataloguePool = items;
+    if (discover.origin === "idle") renderHome();
+  } catch { /* silencieux, c'est un confort et non un prérequis */ }
 }
 
 function showCatalogue(items) {
@@ -1021,21 +1446,27 @@ async function runIndexing() {
   }
 }
 
+/** Actualise le catalogue sans interrompre ce qui est affiché. */
+async function refreshCatalogueQuietly() {
+  try {
+    const items = await source.catalogue();
+    if (!items.length) return;
+    writeCatalogueCache(items);
+    cataloguePool = items;
+    if (discover.origin === "results") showCatalogue(items);
+    notify(`Catalogue actualisé : ${items.length} titres.`, { type: "success", timeout: 3200 });
+  } catch { /* le cache reste affiché, rien à signaler */ }
+}
+
 $("#loadCatalogueBtn").addEventListener("click", () => {
   const cache = readCatalogueCache();
   if (!cache) { fetchCatalogue(); return; }
-  const fresh = Date.now() - cache.at < CATALOGUE_TTL;
-  openModal({
-    title: "Catalogue en cache",
-    body: el("div", {}, [
-      el("p", { text: `${cache.items.length} titres enregistrés dans ce navigateur, mis à jour ${relTime(cache.at)}.` }),
-      el("p", { text: fresh ? "Le cache est encore récent." : "Le cache date de plus de 24 h." }),
-    ]),
-    actions: [
-      { label: "Recharger depuis l'API", variant: "btn-ghost", onClick: fetchCatalogue },
-      { label: "Utiliser le cache", variant: "btn-primary", onClick: () => { showCatalogue(cache.items); navigate("discover"); } },
-    ],
-  });
+  // Le catalogue étant préchargé en tâche de fond, demander « cache ou
+  // rechargement ? » à chaque clic serait une question sans enjeu. On
+  // affiche immédiatement, et on actualise derrière si c'est périmé.
+  showCatalogue(cache.items);
+  navigate("discover");
+  if (Date.now() - cache.at >= CATALOGUE_TTL) refreshCatalogueQuietly();
 });
 
 /* ── Indexation du catalogue côté serveur ──
@@ -1089,28 +1520,72 @@ async function pollIndexing() {
   }
 }
 
+/** Fiche détaillée d'une série.
+
+    Volontairement courte : les données ne contiennent ni synopsis, ni
+    genres, ni note. Une fiche calquée sur Netflix afficherait des blocs
+    vides ; celle-ci ne montre que ce qu'elle peut tenir — grande affiche,
+    titres, saisons, et les actions utiles.
+
+    Tous les boutons doivent porter type="button" : la modale est un
+    <form method="dialog">, un bouton sans type la refermerait au clic. */
 async function showAnimeDetails(anime) {
-  const body = el("div", {}, [el("p", { text: "Chargement des saisons…" })]);
-  openModal({ title: anime.title, body, actions: [{ label: "Fermer", variant: "btn-ghost" }] });
+  const progress = latestProgress(anime.id);
+  const seasonsBox = el("div", { class: "detail-seasons" },
+    el("p", { class: "hint", text: "Chargement des saisons…" }));
+
+  const actions = el("div", { class: "detail-actions" }, [
+    el("button", {
+      type: "button", class: "btn btn-primary",
+      onclick: () => { closeModal(); openAnime(anime, progress
+        ? { seasonSlug: progress.seasonSlug, version: progress.version, episode: progress.lastEpisode }
+        : {}); },
+    }, [icon("play"), el("span", { text: progress ? `Reprendre à l'épisode ${progress.lastEpisode}` : "Regarder" })]),
+    el("button", {
+      type: "button", class: `btn btn-ghost${isFavorite(anime.id) ? " is-on" : ""}`,
+      onclick: (event) => {
+        toggleFavorite(anime);
+        const on = isFavorite(anime.id);
+        event.currentTarget.classList.toggle("is-on", on);
+        event.currentTarget.querySelector("span").textContent = on ? "Dans ma liste" : "Ajouter à ma liste";
+      },
+    }, [icon("star"), el("span", { text: isFavorite(anime.id) ? "Dans ma liste" : "Ajouter à ma liste" })]),
+  ]);
+
+  const fiche = safeUrl(anime.url);   // revalidé : un favori importé d'un JSON tiers pourrait porter une URL forgée
+  const body = el("div", { class: "detail" }, [
+    el("div", { class: "detail-poster" }, posterBox(anime, { eager: true })),
+    el("div", { class: "detail-body" }, [
+      anime.alt ? el("p", { class: "detail-alt", text: anime.alt }) : null,
+      el("div", { class: "detail-chips" }, [
+        Number.isFinite(anime.score) ? el("span", { class: "chip chip-sm", text: `Score ${anime.score}` }) : null,
+        progress ? el("span", { class: "chip chip-sm chip-accent", text: `${progress.seasonLabel} · Ép. ${progress.lastEpisode}` }) : null,
+      ]),
+      actions,
+      seasonsBox,
+      fiche ? el("a", {
+        class: "detail-link", href: fiche, target: "_blank", rel: "noopener noreferrer nofollow",
+      }, [icon("external"), el("span", { text: "Voir la fiche d'origine" })]) : null,
+    ]),
+  ]);
+
+  openModal({ title: anime.title, body, variant: "detail", actions: [{ label: "Fermer", variant: "btn-ghost" }] });
+
   try {
     const seasons = await source.seasons(anime);
-    clear(body);
-    if (anime.alt) body.append(el("p", {}, [el("strong", { text: "Autre titre : " }), anime.alt]));
-    // Revalidé ici : un favori importé depuis un JSON tiers pourrait porter une URL forgée.
-    const fiche = safeUrl(anime.url);
-    if (fiche) body.append(el("p", {}, [el("strong", { text: "Fiche : " }), el("a", { href: fiche, target: "_blank", rel: "noopener noreferrer nofollow", text: fiche })]));
+    clear(seasonsBox);
     if (!seasons.length) {
-      body.append(el("p", { text: "Aucune saison n'a été renvoyée par l'API pour ce titre." }));
+      seasonsBox.append(el("p", { class: "hint", text: "Aucune saison n'a été renvoyée par l'API pour ce titre." }));
       return;
     }
-    body.append(el("p", {}, [el("strong", { text: `${seasons.length} saison(s) détectée(s)` })]));
-    body.append(el("ul", { class: "modal-list" }, seasons.map((season) => el("li", {}, [
-      el("span", { text: season.label }),
-      el("span", { text: season.slug }),
-    ]))));
+    seasonsBox.append(el("p", { class: "side-title", text: `${seasons.length} saison${seasons.length > 1 ? "s" : ""}` }));
+    seasonsBox.append(el("div", { class: "detail-season-list" }, seasons.map((season) => el("button", {
+      type: "button", class: "chip",
+      onclick: () => { closeModal(); openAnime(anime, { seasonSlug: season.slug }); },
+    }, season.label))));
   } catch (err) {
-    clear(body);
-    body.append(el("p", { text: describeError(err) }));
+    clear(seasonsBox);
+    seasonsBox.append(el("p", { class: "hint", text: describeError(err) }));
   }
 }
 
@@ -1220,6 +1695,7 @@ function progressEntry(create = false) {
 }
 
 async function openAnime(anime, options = {}) {
+  rememberCover(anime);
   if (!anime?.title) return;
   const token = ++player.token;
   player.anime = {
@@ -1657,11 +2133,11 @@ function renderEpisodes(status, message = "", elapsed = 0) {
     // fois, instantané ensuite grâce au cache partagé. Sans ce compteur,
     // l'attente ressemble à un blocage.
     if (elapsed > 3) {
-      episodeList.append(el("p", { class: "hint", style: { marginBottom: "8px" } },
+      episodeList.append(el("p", { class: "hint ep-progress" },
         `Résolution des épisodes chez les hébergeurs… ${Math.round(elapsed)} s. ` +
         "Le premier chargement d'une saison est long ; les suivants seront immédiats."));
     }
-    for (let i = 0; i < 6; i++) episodeList.append(el("div", { class: "skeleton skeleton-row", style: { height: "40px" } }));
+    for (let i = 0; i < 6; i++) episodeList.append(el("div", { class: "skeleton skeleton-ep" }));
     return;
   }
   if (status === "error") {
@@ -1859,9 +2335,7 @@ function renderFavorites() {
   else items.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
 
   const fragment = document.createDocumentFragment();
-  items.forEach((fav, index) => fragment.append(animeCard({
-    id: fav.id, title: fav.title, alt: "", url: fav.url, score: null, index,
-  })));
+  items.forEach((fav, index) => fragment.append(animeCard({ ...animeFromFavorite(fav), index })));
   favoritesGrid.append(fragment);
 }
 
@@ -1879,23 +2353,29 @@ function renderContinue() {
   for (const entry of entries) {
     const saved = entry.episodes?.[entry.lastEpisode];
     const ratio = saved?.d ? clamp(saved.t / saved.d, 0, 1) : 0;
-    fragment.append(el("article", { class: "card" }, [
-      el("div", { class: "card-top" }, [
-        el("div", { style: { minWidth: "0", flex: "1" } }, [
-          el("h3", { class: "card-title", text: entry.title }),
-          el("p", { class: "card-sub", text: `${entry.seasonLabel} · Épisode ${entry.lastEpisode} · ${String(entry.version).toUpperCase()}` }),
-        ]),
-      ]),
-      ratio > 0 ? el("div", { class: "progress" }, el("i", { style: { width: `${ratio * 100}%` } })) : null,
+    const resume = () => resumeFrom(
+      { ...entry, episode: entry.lastEpisode },
+      { seek: saved?.done ? null : saved?.t ?? null });
+
+    const poster = posterBox(animeFromProgress(entry), {
+      extra: [
+        el("div", { class: "poster-scrim", "aria-hidden": "true" }),
+        el("div", { class: "poster-actions" }, el("button", {
+          type: "button", class: "btn btn-primary btn-sm btn-icon",
+          title: "Reprendre", "aria-label": `Reprendre ${entry.title}`,
+          onclick: resume,
+        }, icon("play"))),
+        el("div", { class: "poster-bar" }, el("i", { style: { width: `${Math.max(ratio, .02) * 100}%` } })),
+      ],
+    });
+
+    fragment.append(el("article", { class: "card", dataset: { id: entry.animeId } }, [
+      poster,
+      el("h3", { class: "card-title", text: entry.title }),
+      el("p", { class: "card-sub", text: `${entry.seasonLabel} · Ép. ${entry.lastEpisode} · ${String(entry.version).toUpperCase()}` }),
       el("div", { class: "card-meta" }, [
         el("span", { class: "chip chip-sm", text: relTime(entry.updatedAt) }),
         saved?.t ? el("span", { class: "chip chip-sm chip-accent", text: formatTime(saved.t) }) : null,
-      ]),
-      el("div", { class: "card-actions" }, [
-        el("button", {
-          type: "button", class: "btn btn-primary btn-sm",
-          onclick: () => resumeFrom({ ...entry, episode: entry.lastEpisode }, { seek: saved?.done ? null : saved?.t ?? null }),
-        }, [icon("play"), el("span", { text: "Reprendre" })]),
       ]),
     ]));
   }
@@ -1917,6 +2397,8 @@ function renderHistory() {
   const fragment = document.createDocumentFragment();
   for (const item of state.history.slice(0, 60)) {
     fragment.append(el("div", { class: "row" }, [
+      el("div", { class: "row-thumb", "aria-hidden": "true" },
+        posterBox({ id: item.animeId, title: item.title, cover: state.covers[item.animeId] || null })),
       el("div", { class: "row-main" }, [
         el("p", { class: "row-title", text: item.title }),
         el("p", { class: "row-sub", text: `${item.seasonLabel} · Épisode ${item.episode} · ${String(item.version).toUpperCase()} · ${relTime(item.at)}` }),
@@ -2053,17 +2535,18 @@ async function loadChapter(number) {
 
     const index = scans.chapters.findIndex((c) => c.number === number);
     const widthSelect = el("select", { "aria-label": "Largeur de lecture" }, [
-      el("option", { value: "900px", text: "Largeur confortable" }),
-      el("option", { value: "1200px", text: "Large" }),
-      el("option", { value: "100%", text: "Pleine largeur" }),
+      el("option", { value: "comfy", text: "Largeur confortable" }),
+      el("option", { value: "wide", text: "Large" }),
+      el("option", { value: "full", text: "Pleine largeur" }),
+      el("option", { value: "webtoon", text: "Webtoon (pages jointes)" }),
     ]);
-    const pagesWrap = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px", width: "100%", maxWidth: "900px", margin: "0 auto" } });
-    widthSelect.addEventListener("change", () => { pagesWrap.style.maxWidth = widthSelect.value; });
+    const pagesWrap = el("div", { class: "scan-pages", dataset: { width: "comfy" } });
+    widthSelect.addEventListener("change", () => { pagesWrap.dataset.width = widthSelect.value; });
 
     scanReader.append(el("div", { class: "scan-toolbar" }, [
       el("strong", { text: `Chapitre ${number}` }),
       el("span", { class: "chip chip-sm", text: `${urls.length} pages` }),
-      el("span", { style: { flex: "1" } }),
+      el("span", { class: "scan-spacer" }),
       el("div", { class: "field" }, widthSelect),
       el("button", { type: "button", class: "btn btn-ghost btn-sm", disabled: index <= 0, onclick: () => loadChapter(scans.chapters[index - 1].number) }, [icon("prev"), el("span", { text: "Précédent" })]),
       el("button", { type: "button", class: "btn btn-ghost btn-sm", disabled: index < 0 || index >= scans.chapters.length - 1, onclick: () => loadChapter(scans.chapters[index + 1].number) }, [el("span", { text: "Suivant" }), icon("next")]),
@@ -2075,7 +2558,7 @@ async function loadChapter(number) {
         loading: i < 2 ? "eager" : "lazy", decoding: "async", referrerpolicy: "no-referrer",
       });
       image.addEventListener("error", () => {
-        image.replaceWith(el("p", { class: "hint", style: { padding: "12px" }, text: `Page ${i + 1} : image bloquée par l'hébergeur (protection anti-hotlink).` }));
+        image.replaceWith(el("p", { class: "hint scan-page-error", text: `Page ${i + 1} : image bloquée par l'hébergeur (protection anti-hotlink).` }));
       }, { once: true });
       pagesWrap.append(image);
     });
@@ -2111,7 +2594,7 @@ function setApiStatus(status) {
 function applyAppearance() {
   const root = document.documentElement;
   root.dataset.theme = ["dark", "abyss", "light"].includes(state.settings.theme) ? state.settings.theme : "dark";
-  root.dataset.accent = state.settings.accent || "violet";
+  root.dataset.accent = state.settings.accent || "ember";
   root.dataset.motion = state.settings.motion ? "reduced" : "";
   root.dataset.compact = state.settings.compact ? "1" : "";
   for (const button of $$(".accent")) {
@@ -2455,7 +2938,15 @@ function init() {
   applyView(location.hash.slice(1) || "discover");
 
   if (state.settings.demo) setApiStatus("demo");
-  else { autoDiscoverBackend(); pollIndexing(); }
+  else {
+    autoDiscoverBackend();
+    pollIndexing();
+    // Différé : ce confort ne doit pas retarder le premier rendu, ni
+    // maintenir le réseau occupé pendant que la page finit de se charger.
+    const later = () => setTimeout(warmHomeCatalogue, 1200);
+    if (window.requestIdleCallback) requestIdleCallback(later, { timeout: 2000 });
+    else later();
+  }
 
   if (location.protocol === "file:") {
     notify("Panel ouvert en file:// — la plupart des navigateurs bloquent alors les requêtes vers l'API. Sers le dossier avec « python -m http.server 8080 ».",

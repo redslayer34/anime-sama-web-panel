@@ -1,0 +1,201 @@
+/* ════════════════════════════════════════════════════════════════════
+   TOKENS — la seule source de vérité pour couleur, espace, rythme.
+
+   Règle : aucune valeur littérale de couleur, de rayon ou de durée en
+   dehors de ce fichier. Les trois thèmes et les cinq accents ne font que
+   redéfinir ces variables ; tout le reste du CSS s'y réfère.
+
+   Le modèle d'accent tient en trois jetons, et c'est ce qui corrige le
+   défaut de contraste de l'ancien thème clair :
+     --accent       la couleur de remplissage (bouton, barre, liseré)
+     --accent-ink   le texte posé SUR ce remplissage
+     --accent-text  le texte de la couleur d'accent posé sur la page
+   Un seul jeton ne peut pas remplir ces trois rôles à la fois : un ambre
+   lisible sur noir est illisible en texte sur blanc.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Surfaces : noir neutre légèrement froid, pour que les affiches
+        (souvent chaudes) se détachent. ───────────────────────────── */
+  --bg:          #0B0C0F;
+  --bg-deep:     #050609;
+  --surface-1:   #121419;
+  --surface-2:   #1A1D24;
+  --surface-3:   #23272F;
+  --line:        rgba(255, 255, 255, .08);
+  --line-strong: rgba(255, 255, 255, .14);
+  --scrim:       rgba(5, 6, 9, .72);
+
+  /* ── Texte — mesurés contre --bg : 17,8:1 / 8,8:1 / 5,1:1 ───────── */
+  --text:  #F2F4F8;
+  --muted: #A5AEBF;
+  --faint: #7A8394;
+
+  /* ── Accent « ember » par défaut ─────────────────────────────────── */
+  --accent:      #FF9142;
+  --accent-ink:  #1A0F06;
+  --accent-text: #FF9142;
+  --accent-soft: rgba(255, 145, 66, .14);
+  --accent-line: rgba(255, 145, 66, .42);
+
+  /* ── Sémantique ──────────────────────────────────────────────────── */
+  --ok:     #3DDC97;
+  --warn:   #FFC145;
+  --danger: #FF6B7A;
+  --ok-soft:     rgba(61, 220, 151, .14);
+  --warn-soft:   rgba(255, 193, 69, .14);
+  --danger-soft: rgba(255, 107, 122, .14);
+
+  /* ── Espacement, base 4 ──────────────────────────────────────────── */
+  --sp-1:  4px;   --sp-2:  8px;   --sp-3: 12px;   --sp-4: 16px;
+  --sp-5: 20px;   --sp-6: 24px;   --sp-7: 32px;   --sp-8: 40px;
+  --sp-9: 48px;   --sp-10: 64px;  --sp-11: 80px;  --sp-12: 96px;
+
+  /* ── Rayons ──────────────────────────────────────────────────────── */
+  --r-xs:   6px;
+  --r-sm:   8px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-xl:  24px;
+  --r-full: 999px;
+
+  /* ── Élévation : serrée et sombre, jamais de halo diffus ─────────── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .40);
+  --shadow-2: 0 4px 16px -4px rgba(0, 0, 0, .50);
+  --shadow-3: 0 16px 48px -12px rgba(0, 0, 0, .65);
+
+  /* ── Typographie ─────────────────────────────────────────────────── */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+             Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Sora", var(--font-ui);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --fs-2xs: 11px;
+  --fs-xs:  12px;
+  --fs-sm:  13px;
+  --fs-md:  14px;
+  --fs-base: 16px;
+  --fs-lg:  18px;
+  --fs-xl:  22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 36px;
+  --fs-4xl: 48px;
+  --fs-5xl: 64px;
+
+  /* ── Mouvement ───────────────────────────────────────────────────── */
+  --ease:     cubic-bezier(.2, .8, .2, 1);
+  --ease-in-out: cubic-bezier(.4, 0, .2, 1);
+  --t-fast: 120ms;
+  --t:      200ms;
+  --t-slow: 340ms;
+
+  /* ── Mesures de mise en page ─────────────────────────────────────── */
+  --topbar-h: 58px;
+  --navbar-h: 46px;
+  --header-h: calc(var(--topbar-h) + var(--navbar-h));
+  --maxw: 1600px;
+  --gutter: clamp(16px, 3vw, 48px);
+  --poster-r: var(--r-md);
+
+  /* ── Échelle de profondeur, explicite plutôt qu'au jugé ──────────── */
+  --z-deco:    0;
+  --z-raised:  1;
+  --z-sticky:  100;
+  --z-nav:     200;
+  --z-overlay: 300;
+  --z-toast:   400;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   THÈME « ABYSSE » — noir absolu pour écran OLED.
+   Contrairement à l'ancien correctif de 8 lignes, les ombres et les
+   filets sont réalignés : sur du noir pur, une ombre douce ne se voit
+   pas, seul un filet lumineux sépare les plans.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-theme="abyss"] {
+  --bg:          #000000;
+  --bg-deep:     #000000;
+  --surface-1:   #0A0B0E;
+  --surface-2:   #121419;
+  --surface-3:   #1B1E25;
+  --line:        rgba(255, 255, 255, .10);
+  --line-strong: rgba(255, 255, 255, .18);
+  --scrim:       rgba(0, 0, 0, .80);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .60);
+  --shadow-2: 0 4px 16px -4px rgba(0, 0, 0, .75);
+  --shadow-3: 0 16px 48px -12px rgba(0, 0, 0, .90);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   THÈME CLAIR — conçu, pas simplement inversé.
+   Les affiches portent leur propre art, souvent sombre : les surfaces
+   restent franchement blanches et la séparation se fait par l'ombre
+   plutôt que par la bordure, sinon la grille devient un damier.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg:          #F4F5F8;
+  --bg-deep:     #E8EAF0;
+  --surface-1:   #FFFFFF;
+  --surface-2:   #F7F8FB;
+  --surface-3:   #EDEFF4;
+  --line:        rgba(16, 22, 40, .10);
+  --line-strong: rgba(16, 22, 40, .20);
+  --scrim:       rgba(16, 22, 40, .55);
+
+  --text:  #12151C;
+  --muted: #5A6274;
+  --faint: #646C7C;
+
+  --accent-text: #A8500C;      /* 5,5:1 sur blanc — l'ambre pur n'y est qu'à 2,2:1 */
+
+  --ok:     #0F766E;
+  --warn:   #A15C07;
+  --danger: #C2185B;
+  --ok-soft:     rgba(15, 118, 110, .12);
+  --warn-soft:   rgba(161, 92, 7, .12);
+  --danger-soft: rgba(194, 24, 91, .10);
+
+  --shadow-1: 0 1px 2px rgba(16, 22, 40, .08);
+  --shadow-2: 0 4px 16px -4px rgba(16, 22, 40, .14);
+  --shadow-3: 0 16px 48px -12px rgba(16, 22, 40, .20);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ACCENTS — cinq teintes, toutes vérifiées au contraste.
+   Chacune définit son remplissage, son encre, et sa déclinaison lisible
+   en texte sur fond clair. « amber » reste un alias d'« ember » : c'est
+   l'ancien nom, et les réglages déjà enregistrés le contiennent.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-accent="ember"],
+:root[data-accent="amber"] {
+  --accent: #FF9142; --accent-ink: #1A0F06; --accent-text: #FF9142;
+  --accent-soft: rgba(255, 145, 66, .14); --accent-line: rgba(255, 145, 66, .42);
+}
+:root[data-accent="cyan"] {
+  --accent: #22C8E6; --accent-ink: #04222B; --accent-text: #22C8E6;
+  --accent-soft: rgba(34, 200, 230, .14); --accent-line: rgba(34, 200, 230, .42);
+}
+:root[data-accent="rose"] {
+  --accent: #FF7BA5; --accent-ink: #2A0713; --accent-text: #FF7BA5;
+  --accent-soft: rgba(255, 123, 165, .14); --accent-line: rgba(255, 123, 165, .42);
+}
+:root[data-accent="emerald"] {
+  --accent: #2DD4A7; --accent-ink: #04231A; --accent-text: #2DD4A7;
+  --accent-soft: rgba(45, 212, 167, .14); --accent-line: rgba(45, 212, 167, .42);
+}
+:root[data-accent="violet"] {
+  --accent: #A08CFF; --accent-ink: #120A2E; --accent-text: #A08CFF;
+  --accent-soft: rgba(160, 140, 255, .14); --accent-line: rgba(160, 140, 255, .42);
+}
+
+/* En thème clair, l'accent de remplissage ne change pas — c'est le texte
+   de couleur accent qui doit foncer pour rester lisible sur du blanc. */
+:root[data-theme="light"][data-accent="ember"],
+:root[data-theme="light"][data-accent="amber"]   { --accent-text: #A8500C }
+:root[data-theme="light"][data-accent="cyan"]    { --accent-text: #0E7490 }
+:root[data-theme="light"][data-accent="rose"]    { --accent-text: #C2185B }
+:root[data-theme="light"][data-accent="emerald"] { --accent-text: #0F766E }
+:root[data-theme="light"][data-accent="violet"]  { --accent-text: #6D45E8 }

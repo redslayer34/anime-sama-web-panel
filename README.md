@@ -203,6 +203,20 @@ toi de voir.
 
 ## 3. Ce qui fonctionne vraiment
 
+### L'interface
+
+Le panel s'ouvre sur un **accueil** : une série mise en avant, puis des rangées
+horizontales — *Reprendre la lecture*, *Ma liste*, *Populaires*, *Dans le catalogue*.
+Cet accueil est l'état au repos de la vue « Découvrir » : dès qu'une recherche ou le
+catalogue remplit la grille, il s'efface au profit des résultats.
+
+Les **jaquettes** viennent du catalogue d'Anime-Sama, qui en fournit une par fiche. Le
+panel tente d'abord l'URL directe, bascule sur sa propre route `/img` si l'hébergeur
+refuse (protection anti-hotlink, ou CDN filtré par le réseau), et dessine en dernier
+recours une affiche dérivée du titre — stable d'une session à l'autre, jamais une image
+cassée. Les jaquettes des séries ouvertes ou mises en favori sont mémorisées, pour que
+« Ma liste », l'historique et les reprises en profitent aussi.
+
 ### Sans backend, immédiatement
 
 - Navigation entre les six vues, thèmes (Sombre / Abysse OLED / Clair), 5 couleurs
@@ -234,9 +248,12 @@ toi de voir.
 Ces fonctions ne sont **pas** implémentées, faute de source de données : le panel ne
 prétend pas les fournir.
 
-- **Jaquettes, synopsis, genres, notes** : l'API ne renvoie ni image ni métadonnée
-  descriptive. Les cartes affichent donc titre, titre alternatif et score de recherche.
-  Il faudrait brancher une API tierce (AniList, Jikan/MyAnimeList) pour aller plus loin.
+- **Synopsis, genres, notes** : l'API ne renvoie aucune métadonnée descriptive. Les
+  fiches affichent donc l'affiche, le titre, le titre alternatif et le score de
+  recherche — rien de plus. Il faudrait brancher une API tierce (AniList,
+  Jikan/MyAnimeList) pour aller plus loin.
+  *(Les **jaquettes**, elles, existent bel et bien : le catalogue d'Anime-Sama en
+  fournit une par fiche, et le panel les affiche depuis la refonte.)*
 - **Compte utilisateur, synchronisation multi-appareils** : nécessiterait un serveur avec
   base de données. Ici, chaque navigateur a ses propres données (avec synchronisation
   entre onglets d'un même navigateur).
@@ -248,9 +265,15 @@ prétend pas les fournir.
 
 ```
 index.html      Structure sémantique, sprite SVG, modale <dialog>, zone de notifications
-style.css       Design system : variables CSS, 3 thèmes, 5 accents, responsive, animations
-script.js       Toute la logique, en sections numérotées (utilitaires, stockage, API,
-                toasts/modales, navigation, découverte, lecteur, favoris, scans, réglages)
+styles/         Feuilles chargées dans cet ordre, chacune s'appuyant sur la précédente :
+                  tokens.css      couleurs, espacements, rayons, ombres, 3 thèmes, 5 accents
+                  base.css        remise à zéro, polices auto-hébergées, accessibilité
+                  components.css  boutons, affiches, cartes, rangées, épisodes, modale…
+                  views.css       coque, navigation, accueil, lecteur, scans, réglages
+                  fonts/          Inter et Sora en variable (72 Ko, aucun CDN)
+script.js       Toute la logique, en sections numérotées (utilitaires, jaquettes, stockage,
+                API, toasts/modales, navigation, accueil, découverte, lecteur, favoris,
+                scans, réglages)
 serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api,
                 gère le mot de passe et l'indexation de fond
 Dockerfile      Image « panel + backend » pour l'hébergement
@@ -266,8 +289,9 @@ lancer.sh       Raccourci Linux
 legacy/         L'ancien fichier preview.html, conservé pour référence
 ```
 
-Aucune dépendance à installer. Le seul script externe est **hls.js** (version épinglée,
-chargé depuis jsDelivr) pour lire les flux `.m3u8` ; s'il est indisponible, le panel le
+Aucune dépendance à installer, et les polices sont servies depuis le dépôt : rien
+d'autre que le panel n'est nécessaire au rendu. Le seul script externe est **hls.js**
+(version épinglée, chargé depuis jsDelivr) pour lire les flux `.m3u8` ; s'il est indisponible, le panel le
 signale clairement et continue de fonctionner pour tout le reste. Pour un usage
 totalement hors ligne, télécharge `hls.min.js` à côté de `index.html` et remplace l'URL
 du `<script>` par `hls.min.js`.

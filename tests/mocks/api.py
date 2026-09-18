@@ -16,12 +16,18 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
 STATIC = "http://127.0.0.1:8080"          # racine du dépôt servie par les tests
 FIXTURES = STATIC + "/tests/fixtures"
 
+# Les jaquettes pointent vers des fixtures du dépôt : servies par le même
+# hôte que le panel, elles se chargent réellement et exercent le chemin
+# image. « Jujutsu Kaisen » reste volontairement sans image pour couvrir
+# aussi l'affiche dessinée de repli.
+COVER = "/tests/fixtures/page{}.svg"
+
 CATALOGUE = [
-    {"title": "One Piece", "AlterTitle": "Wan Pisu", "link": "https://anime-sama.org/catalogue/one-piece/"},
-    {"title": "Frieren", "AlterTitle": "Sousou no Frieren", "link": "https://anime-sama.org/catalogue/frieren/"},
-    {"title": "Demon Slayer", "AlterTitle": "Kimetsu no Yaiba", "link": "https://anime-sama.org/catalogue/demon-slayer/"},
+    {"title": "One Piece", "AlterTitle": "Wan Pisu", "link": "https://anime-sama.org/catalogue/one-piece/", "cover": COVER.format(1)},
+    {"title": "Frieren", "AlterTitle": "Sousou no Frieren", "link": "https://anime-sama.org/catalogue/frieren/", "cover": COVER.format(2)},
+    {"title": "Demon Slayer", "AlterTitle": "Kimetsu no Yaiba", "link": "https://anime-sama.org/catalogue/demon-slayer/", "cover": COVER.format(3)},
     {"title": "Jujutsu Kaisen", "AlterTitle": "", "link": "https://anime-sama.org/catalogue/jujutsu-kaisen/"},
-    {"title": "Attack on Titan", "AlterTitle": "Shingeki no Kyojin", "link": "https://anime-sama.org/catalogue/attack-on-titan/"},
+    {"title": "Attack on Titan", "AlterTitle": "Shingeki no Kyojin", "link": "https://anime-sama.org/catalogue/attack-on-titan/", "cover": COVER.format(1)},
 ]
 
 
@@ -59,7 +65,7 @@ class Handler(BaseHTTPRequestHandler):
             needle = query.get("q", "").lower()
             limit = int(query.get("l", 5) or 5)
             return self.json([
-                {"title": a["title"], "lien": a["link"], "score": 95 - i * 3}
+                {"title": a["title"], "lien": a["link"], "cover": a.get("cover"), "score": 95 - i * 3}
                 for i, a in enumerate(CATALOGUE) if needle in a["title"].lower()
             ][:limit])
 

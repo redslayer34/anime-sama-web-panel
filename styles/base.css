@@ -1,0 +1,199 @@
+/* ════════════════════════════════════════════════════════════════════
+   BASE — remise à zéro, polices, typographie, accessibilité.
+   Chargée après tokens.css, avant components.css.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Polices auto-hébergées ───────────────────────────────────────────
+   Deux fichiers variables (72 Ko au total) plutôt qu'un lien vers Google
+   Fonts : le panel doit fonctionner derrière un réseau qui filtre les
+   CDN, et une requête *suspendue* vers une police bloquerait aussi la
+   navigation des suites de tests, qui attendent l'état « réseau au
+   repos ». `swap` garantit un texte lisible dès la première frame. */
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter-var.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Sora";
+  src: url("fonts/sora-var.woff2") format("woff2");
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+*, *::before, *::after { box-sizing: border-box }
+
+/* L'affichage des éléments pilotés par JS passe par l'attribut `hidden`
+   (#video, #frame, #indexBanner, #playerNote…). Ce !important est le
+   garde-fou qui empêche n'importe quelle règle de composant de le
+   contredire — sans lui, vidéo et iframe s'empileraient. */
+[hidden] { display: none !important }
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* `clip` plutôt que `hidden` : `hidden` ferait du corps un conteneur de
+     défilement, ce qui casserait les en-têtes `position: sticky`. */
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+/* ── Titres : la police display ne sert qu'ici, c'est elle qui porte
+      l'identité. L'interlettrage se resserre avec la taille. ───────── */
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+}
+h1 { font-size: clamp(var(--fs-2xl), 3.2vw, var(--fs-3xl)); letter-spacing: -.03em }
+h2 { font-size: var(--fs-xl) }
+h3 { font-size: var(--fs-base) }
+p  { margin: 0 }
+
+a { color: inherit; text-decoration: none }
+a:hover { color: var(--accent-text) }
+
+button, input, select, textarea { font: inherit; color: inherit }
+button { cursor: pointer }
+img, video, iframe, svg { display: block; max-width: 100% }
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: .9em;
+}
+code {
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--surface-3);
+  color: var(--text);
+}
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+/* ── Icônes : le sprite est dessiné sur une grille 24 en tracé ─────── */
+svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sprite { display: none }
+
+/* ── Focus : un seul anneau, partout, et toujours visible sur l'accent
+      quel que soit le fond grâce au double liseré. ─────────────────── */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  border-radius: var(--r-sm);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Animé par `transform` et non par `top` : c'est la règle que s'impose
+   tout le reste de la feuille, et une propriété qui ne déclenche pas de
+   recalcul de mise en page. */
+.skip-link {
+  position: fixed;
+  top: var(--sp-3);
+  left: var(--sp-3);
+  z-index: var(--z-toast);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-3);
+  transform: translateY(calc(-100% - var(--sp-5)));
+  transition: transform var(--t) var(--ease);
+}
+.skip-link:focus { transform: none; color: var(--accent-ink) }
+
+main:focus { outline: none }
+
+::selection { background: var(--accent); color: var(--accent-ink) }
+
+/* ── Barres de défilement : discrètes, jamais absentes ────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px }
+*::-webkit-scrollbar-track { background: transparent }
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--line-strong); background-clip: content-box }
+
+/* ════════════════════════════════════════════════════════════════════
+   MOUVEMENT RÉDUIT
+   Couvre aussi `scroll-behavior`, que l'ancienne règle oubliait : les
+   rangées horizontales et le retour en haut de page défilent en douceur,
+   ce qui est précisément ce qu'un utilisateur sensible veut éviter.
+   ════════════════════════════════════════════════════════════════════ */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: .001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .001ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Impression : on ne garde que le contenu ──────────────────────── */
+@media print {
+  .topbar, .sidebar, .toasts, .player-bar, .rail-arrow, .hero { display: none !important }
+  body { background: #fff; color: #000 }
+}
