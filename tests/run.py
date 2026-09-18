@@ -32,7 +32,7 @@ from lib.ports import free                                    # noqa: E402
 PORTS = {
     "api": 5000, "static": 8080, "auth": 8405,
     "jobs": 8501, "indexing": 8403, "relay": 8602, "video": 9100,
-    "smart": 8603, "smart_degraded": 8604,
+    "smart": 8603, "smart_degraded": 8604, "cache": 8605,
 }
 SHOTS = TESTS / "screenshots"
 PASSWORD = "mot-de-passe-test"
@@ -110,6 +110,10 @@ def unit_stream():
 
 def unit_equivalence():
     return run([sys.executable, str(TESTS / "unit" / "test_parallel_equivalence.py")])
+
+
+def unit_playable():
+    return run([sys.executable, str(TESTS / "unit" / "test_playable_check.py")])
 
 
 def browser_panel():
@@ -206,6 +210,21 @@ def browser_smart_loading():
         stack.stop()
 
 
+def browser_episode_cache():
+    stack = Stack()
+    try:
+        free(PORTS["api"], PORTS["cache"])
+        stack.mock("api_smart.py", PORTS["api"])
+        wait_for(f"http://127.0.0.1:{PORTS['api']}/")
+        stack.panel(PORTS["cache"])
+        if not wait_for(f"http://127.0.0.1:{PORTS['cache']}/healthz"):
+            print("  le panel n'a pas démarré"); return False
+        return run(["node", str(TESTS / "browser" / "episode-cache.test.js")],
+                   {"PANEL_URL": f"http://127.0.0.1:{PORTS['cache']}"})
+    finally:
+        stack.stop()
+
+
 def browser_smart_loading_degraded():
     stack = Stack()
     try:
@@ -225,6 +244,7 @@ def browser_smart_loading_degraded():
 UNIT = [
     ("Relais de flux (filtre, playlists, Range)", unit_stream),
     ("Équivalence de la résolution parallèle", unit_equivalence),
+    ("Vérification de lecture : réécriture équivalente", unit_playable),
 ]
 BROWSER = [
     ("Panel complet", browser_panel),
@@ -234,6 +254,7 @@ BROWSER = [
     ("Bascule vers le relais vidéo", browser_relay),
     ("Chargement intelligent (épisode prioritaire)", browser_smart_loading),
     ("Chargement intelligent : dégradation sans patch", browser_smart_loading_degraded),
+    ("Cache persistant des épisodes", browser_episode_cache),
 ]
 
 

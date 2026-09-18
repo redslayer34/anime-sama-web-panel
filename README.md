@@ -327,6 +327,37 @@ bloquant), et remplit les boutons restants au fur et à mesure.
 Cliquer un épisode pas encore résolu (grisé, « non résolu ») le demande à son tour en
 priorité : un court instant de résolution, puis la lecture démarre. Rien à configurer.
 
+### Ce qui a été accéléré ensuite
+
+Quatre changements indépendants, chacun mesuré plutôt que supposé
+(`python3 tests/bench/resolution.py` rejoue les mesures) :
+
+- **Les saisons déjà résolues sont conservées dans le navigateur** (12 h, 40 saisons au
+  plus). Rouvrir une série commencée n'émet plus **aucune** requête : la liste est là
+  immédiatement et la lecture part sans aller-retour. C'est le gain le plus visible,
+  parce que le cache du serveur ne survit pas à la mise en veille d'une instance
+  gratuite. Un lien qui a expiré efface l'entrée tout seul, et la fois suivante repart
+  d'une résolution fraîche — rien à purger à la main.
+- **L'épisode suivant est préchargé** pendant que tu regardes le courant : l'enchaînement
+  automatique en fin d'épisode ne marque plus de pause.
+- **La vérification « ce flux répond-il ? » tente d'abord la requête avec `Referer`.**
+  Les hébergeurs qui l'exigent — sibnet en tête, et c'est le lecteur prioritaire —
+  rejetaient l'autre systématiquement : on payait jusqu'à trois secondes d'attente avant
+  d'essayer la bonne. Les deux tentatives forment un OU, donc l'ordre ne change aucune
+  réponse ; c'est purement du temps rendu. Les connexions sont en outre refermées, ce qui
+  évite de repayer un handshake TLS à chaque contrôle.
+- **Les trois requêtes préalables à toute résolution ont enfin un délai maximal** et
+  partagent la session du thread : un hébergeur muet n'immobilise plus un worker
+  indéfiniment, et on ne reconstruit plus deux sessions HTTP par appel.
+
+Le nombre de résolutions simultanées passe de 6 à 8 (`PANEL_RESOLVER_WORKERS`) : mesuré
+à environ ×1,3 sur une saison entière, à nombre de requêtes identique. Au-delà de 12 le
+gain s'épuise et le risque de limitation par les hébergeurs augmente.
+
+Une idée a été **écartée par la mesure** : essayer tous les lecteurs en parallèle pour un
+même épisode. Le banc donne ×1,11 seulement, pour 73 % de requêtes en plus — le coût ne
+vaut pas le gain.
+
 Concrètement :
 
 - **Premier chargement d'une saison jamais visitée** : les boutons apparaissent en

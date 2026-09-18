@@ -713,6 +713,65 @@ function cached(bucket, key, producer) {
 
 function invalidate(key) { memory.seasons.delete(key); memory.episodes.delete(key); }
 
+/* ─────────────────────────────────────────────
+   Épisodes résolus, conservés d'une visite à l'autre
+
+   Résoudre une saison coûte une à plusieurs requêtes par épisode vers les
+   hébergeurs vidéo : c'est, de loin, l'attente la plus longue du panel. Le
+   serveur garde déjà ses résultats six heures, mais sur une instance
+   gratuite qui s'endort au bout de quinze minutes ce cache est froid la
+   plupart du temps — et le cache mémoire du navigateur, lui, disparaît à
+   chaque rechargement de page.
+
+   D'où ce magasin : rouvrir une saison déjà vue redevient instantané, sans
+   une seule requête. Les liens des hébergeurs finissant par expirer, il est
+   à la fois daté et auto-réparant — une lecture qui échoue efface l'entrée,
+   et la fois suivante repart d'une résolution fraîche.
+   ───────────────────────────────────────────── */
+const RESOLVED_KEY = "animeSamaPanel.resolved.v1";
+const RESOLVED_TTL = 12 * 3600 * 1000;    // au-delà, les liens sont trop incertains
+const RESOLVED_MAX = 40;                  // saisons conservées, les plus anciennes partent
+
+function seasonKey(anime, slug, version) { return `${anime?.id}::${slug}::${version}`; }
+
+function readResolvedStore() {
+  try {
+    const raw = JSON.parse(safeStorage.get(RESOLVED_KEY) || "null");
+    return (raw && typeof raw === "object") ? raw : {};
+  } catch { return {}; }
+}
+
+function readResolved(key) {
+  const entry = readResolvedStore()[key];
+  if (!entry || !Array.isArray(entry.episodes)) return null;
+  if (Date.now() - (entry.at || 0) > RESOLVED_TTL) return null;
+  // Une saison partielle ne sert à rien : elle laisserait des boutons
+  // « non résolus » sans qu'aucun chargement de fond ne soit lancé.
+  if (entry.episodes.length < (entry.count || 0)) return null;
+  return entry;
+}
+
+function writeResolved(key, episodes, count) {
+  if (!key || !episodes?.length) return;
+  const store = readResolvedStore();
+  store[key] = { at: Date.now(), count: count || episodes.length, episodes };
+  const keys = Object.keys(store);
+  if (keys.length > RESOLVED_MAX) {
+    for (const old of keys.sort((a, b) => (store[a].at || 0) - (store[b].at || 0))
+                          .slice(0, keys.length - RESOLVED_MAX)) {
+      delete store[old];
+    }
+  }
+  safeStorage.set(RESOLVED_KEY, JSON.stringify(store));
+}
+
+function dropResolved(key) {
+  const store = readResolvedStore();
+  if (!(key in store)) return;
+  delete store[key];
+  safeStorage.set(RESOLVED_KEY, JSON.stringify(store));
+}
+
 /* ── Mode démo : données locales + vidéos de test libres de droits ──
    Aucun contenu Anime-Sama n'est diffusé ici ; il s'agit uniquement de
    vérifier que l'interface et le lecteur fonctionnent sans backend.     */
@@ -1747,6 +1806,30 @@ function mergeEpisode(episode) {
   }
 }
 
+/** Résout discrètement l'épisode suivant pendant qu'on regarde le courant.
+
+    Sans ça, l'enchaînement automatique en fin d'épisode déclenche une
+    résolution à la demande — quelques secondes d'écran noir au pire moment.
+    Une seule requête, aucun retour visuel : si elle échoue, le clic normal
+    reprendra la main comme avant. */
+function prefetchNext(number) {
+  if (source.isDemo || !player.anime || !player.season) return;
+  const next = number + 1;
+  if (next >= player.episodeCount) return;                     // fin de saison
+  if (player.episodes.some((e) => e.number === next)) return;   // déjà connu
+  if (player.resolvingEpisodes.has(next)) return;
+
+  const token = player.token;
+  const anime = player.anime, slug = player.season.slug, version = player.version;
+  source.episode(anime, slug, version, next)
+    .then((result) => {
+      if (token !== player.token || result.degraded || !result.episode) return;
+      mergeEpisode(result.episode);
+      renderEpisodes(episodesStatus());
+    })
+    .catch(() => { /* simple confort : un échec ne doit rien changer */ });
+}
+
 /** Résout le reste de la saison en tâche de fond, sans bloquer l'affichage.
     Réutilise l'appel habituel (inchangé, toujours en cache côté serveur) :
     même travail que par le passé, seulement réordonné dans le temps. */
@@ -1757,6 +1840,9 @@ function warmFullSeason(token) {
       if (token !== player.token) return;
       player.episodes = episodes;
       player.episodeCount = episodes.length;
+      // Conservé pour les visites suivantes : c'est ce qui rend la
+      // réouverture d'une saison déjà vue immédiate.
+      if (!source.isDemo) writeResolved(seasonKey(anime, season.slug, version), episodes, episodes.length);
       renderEpisodes(episodes.length ? "ok" : "empty");
     })
     .catch((err) => {
@@ -1777,7 +1863,11 @@ async function loadEpisodes({ episode = null, seek = null, autoplay = false, for
   player.pendingPlay = null;
   renderEpisodes("loading");
 
-  if (force) invalidate(`episodes:${player.anime.title}:${player.season.slug}:${player.version}`);
+  const key = seasonKey(player.anime, player.season.slug, player.version);
+  if (force) {
+    invalidate(`episodes:${player.anime.title}:${player.season.slug}:${player.version}`);
+    dropResolved(key);
+  }
 
   // Chargement intelligent : on résout d'abord la cible probable (reprise de
   // lecture, ou premier épisode) plutôt que d'attendre toute la saison. Le
@@ -1785,6 +1875,22 @@ async function loadEpisodes({ episode = null, seek = null, autoplay = false, for
   // dès ce premier aller-retour — voir source.episode().
   const saved = progressEntry(false);
   const target = Number(episode ?? saved?.lastEpisode ?? 0);
+
+  // Saison déjà résolue lors d'une visite précédente : aucune requête, la
+  // liste est complète immédiatement. C'est le cas le plus fréquent dès qu'on
+  // revient sur une série commencée.
+  const stored = (!force && !source.isDemo) ? readResolved(key) : null;
+  if (stored) {
+    player.episodes = stored.episodes;
+    player.episodeCount = stored.count;
+    renderEpisodes("ok");
+    const known = player.episodes.find((e) => e.number === target);
+    if (known) {
+      if (autoplay) playResolvedEpisode(known, { seek });
+      else selectEpisode(target);
+    }
+    return;
+  }
 
   let degraded = false;
   try {
@@ -1799,6 +1905,7 @@ async function loadEpisodes({ episode = null, seek = null, autoplay = false, for
     if (degraded) {
       player.episodes = result.episodes;
       player.episodeCount = result.episodes.length;
+      if (!source.isDemo) writeResolved(key, result.episodes, result.episodes.length);
     } else {
       player.episodeCount = result.count;
       if (result.episode) mergeEpisode(result.episode);
@@ -1854,6 +1961,7 @@ function playResolvedEpisode(episode, { seek = null, sourceIndex = 0 } = {}) {
   updatePlayerHeader();
   renderHistory();
   renderContinue();
+  prefetchNext(episode.number);
 }
 
 /** "ok" une fois tous les épisodes connus, "partial" tant qu'il en manque. */
@@ -2091,6 +2199,12 @@ video.addEventListener("waiting", () => setStageLoading(true));
 video.addEventListener("error", () => {
   if (retryThroughRelay()) return;
   setStageLoading(false);
+  // Un lien qui ne passe même plus par le relais est périmé : on jette la
+  // saison mémorisée pour que la prochaine ouverture reparte d'une
+  // résolution fraîche, sans que l'utilisateur ait à y penser.
+  if (player.anime && player.season) {
+    dropResolved(seasonKey(player.anime, player.season.slug, player.version));
+  }
   setNote(player.relayed
     ? "Même relayée par le serveur, cette source reste illisible : le lien a sans doute expiré. Recharge la liste des épisodes, ou choisis un autre hébergeur."
     : "Le navigateur n'a pas pu lire cette source (lien expiré ou format non supporté). Essaie un autre hébergeur, le mode « Page du lecteur », ou « Ouvrir la source ».");
@@ -2813,6 +2927,7 @@ $("#resetBtn").addEventListener("click", async () => {
   if (!ok) return;
   safeStorage.remove(STORE_KEY);
   safeStorage.remove(CATALOGUE_KEY);
+  safeStorage.remove(RESOLVED_KEY);
   location.reload();
 });
 

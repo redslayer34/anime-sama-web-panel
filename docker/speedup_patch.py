@@ -29,7 +29,7 @@ import io
 import sys
 from pathlib import Path
 
-WORKERS_DEFAULT = "6"
+WORKERS_DEFAULT = "8"
 
 
 def replace_once(text, old, new, label):
@@ -93,7 +93,11 @@ from concurrent.futures import ThreadPoolExecutor as _PanelPool
 try:
     _PANEL_WORKERS = max(1, int(os.environ.get("PANEL_RESOLVER_WORKERS", "%s")))
 except ValueError:
-    _PANEL_WORKERS = 6
+    _PANEL_WORKERS = %s
+
+# (connexion, lecture) : borne les requêtes du préambule, qui n'en avaient
+# aucune. Large exprès — il s'agit d'éviter un blocage, pas de couper court.
+_PANEL_TIMEOUT = (10, 30)
 
 _panel_local = _panel_threading.local()
 
@@ -107,17 +111,102 @@ def _panel_scraper():
 
 
 PATH = os.path.dirname(os.path.abspath(__file__))
-''' % WORKERS_DEFAULT
+''' % (WORKERS_DEFAULT, WORKERS_DEFAULT)
 
 
 # ─────────────────────────────────────────────
 #  backend.py : is_stream_playable sans session partagée
 # ─────────────────────────────────────────────
-PLAYABLE_OLD_1 = '''                r = scraper.get(test_link, headers=standard_headers, timeout=3, stream=True)'''
-PLAYABLE_NEW_1 = '''                r = _panel_scraper().get(test_link, headers=standard_headers, timeout=3, stream=True)'''
+# La vérification « ce flux répond-il ? » était la principale dépense
+# évitable : une tentative vouée à l'échec avant la bonne, et une
+# connexion jamais rendue au pool. Le booléen produit est inchangé.
+PLAYABLE_OLD = '''            # Test direct sans Referer spécifique (mode standard de yt-dlp)
+            standard_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "Accept": "*/*"
+            }
+            try:
+                r = scraper.get(test_link, headers=standard_headers, timeout=3, stream=True)
+                if r.status_code in (200, 206):
+                    return True
+            except Exception:
+                pass
 
-PLAYABLE_OLD_2 = '''                r = scraper.get(test_link, headers={**standard_headers, "Referer": f"{parsed.scheme}://{domain}/"}, timeout=3, stream=True)'''
-PLAYABLE_NEW_2 = '''                r = _panel_scraper().get(test_link, headers={**standard_headers, "Referer": f"{parsed.scheme}://{domain}/"}, timeout=3, stream=True)'''
+            # Si échec, tester avec Referer du domaine
+            parsed = urlparse(test_link)
+            domain = parsed.netloc.lower()
+            try:
+                r = scraper.get(test_link, headers={**standard_headers, "Referer": f"{parsed.scheme}://{domain}/"}, timeout=3, stream=True)
+                if r.status_code in (200, 206):
+                    return True
+            except Exception:
+                pass
+
+            return False
+'''
+
+PLAYABLE_NEW = '''            standard_headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "Accept": "*/*"
+            }
+            parsed = urlparse(test_link)
+            domain = parsed.netloc.lower()
+
+            # Deux tentatives dont le résultat est un OU logique : leur ordre
+            # ne change donc aucune réponse. On commence par celle qui porte
+            # le Referer, parce que les hébergeurs qui l'exigent — sibnet en
+            # tête, et c'est le lecteur prioritaire — rejettent l'autre
+            # systématiquement. Elle coûtait jusqu'à trois secondes d'attente
+            # avant même d'essayer la bonne.
+            for headers in (
+                {**standard_headers, "Referer": f"{parsed.scheme}://{domain}/"},
+                standard_headers,
+            ):
+                try:
+                    r = _panel_scraper().get(test_link, headers=headers, timeout=3, stream=True)
+                except Exception:
+                    continue
+                try:
+                    if r.status_code in (200, 206):
+                        return True
+                finally:
+                    # Le corps n'est jamais lu (stream=True) : sans fermeture
+                    # explicite, urllib3 ne peut pas remettre la connexion au
+                    # pool et chaque vérification repayait un handshake TLS.
+                    r.close()
+
+            return False
+'''
+
+
+# ─────────────────────────────────────────────
+#  backend.py : préambule — session partagée et délais bornés
+# ─────────────────────────────────────────────
+# Trois requêtes précèdent toute résolution, et aucune n'avait de délai
+# maximal : un hébergeur qui ne répond jamais immobilisait le worker
+# indéfiniment. Elles créaient en plus deux sessions par appel, chacune
+# reparsant un mégaoctet de données d'empreinte navigateur.
+PREAMBLE_INFO_OLD = '''        scraper = cloudscraper.create_scraper()  # équivaut à un navigateur
+        reponse = scraper.get(base_url)
+'''
+
+PREAMBLE_INFO_NEW = '''        scraper = _panel_scraper()  # équivaut à un navigateur, une par thread
+        reponse = scraper.get(base_url, timeout=_PANEL_TIMEOUT)
+'''
+
+PREAMBLE_SEASON_OLD = '''        scraper = cloudscraper.create_scraper()
+        second = scraper.get(link)
+'''
+
+PREAMBLE_SEASON_NEW = '''        scraper = _panel_scraper()
+        second = scraper.get(link, timeout=_PANEL_TIMEOUT)
+'''
+
+PREAMBLE_JS_OLD = '''        js_text = scraper.get(jsfile).text
+'''
+
+PREAMBLE_JS_NEW = '''        js_text = scraper.get(jsfile, timeout=_PANEL_TIMEOUT).text
+'''
 
 
 # ─────────────────────────────────────────────
@@ -299,8 +388,10 @@ def main():
 
     text = io.open(backend, encoding="utf-8").read()
     text = replace_once(text, BACKEND_HEADER_OLD, BACKEND_HEADER_NEW, "backend.py / en-tête")
-    text = replace_once(text, PLAYABLE_OLD_1, PLAYABLE_NEW_1, "backend.py / is_stream_playable (1)")
-    text = replace_once(text, PLAYABLE_OLD_2, PLAYABLE_NEW_2, "backend.py / is_stream_playable (2)")
+    text = replace_once(text, PLAYABLE_OLD, PLAYABLE_NEW, "backend.py / is_stream_playable")
+    text = replace_once(text, PREAMBLE_INFO_OLD, PREAMBLE_INFO_NEW, "backend.py / préambule getInfoAnime")
+    text = replace_once(text, PREAMBLE_SEASON_OLD, PREAMBLE_SEASON_NEW, "backend.py / préambule saison")
+    text = replace_once(text, PREAMBLE_JS_OLD, PREAMBLE_JS_NEW, "backend.py / préambule episodes.js")
     text = replace_once(text, SIGNATURE_OLD, SIGNATURE_NEW, "backend.py / signature getAnimeLink")
     text = replace_once(text, LOOP_OLD, LOOP_NEW, "backend.py / boucle de résolution")
     ast.parse(text)
