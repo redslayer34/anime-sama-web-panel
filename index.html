@@ -223,32 +223,22 @@
 
     <!-- ══════════════════ LECTEUR ══════════════════ -->
     <section class="view" id="view-player" data-view="player" aria-labelledby="h-player">
-      <div class="player-layout">
+      <!-- Page de visionnage : la vidéo d'abord, le titre et les actions
+           dessous, la liste des épisodes à droite. Les réglages techniques
+           (mode de lecture, hébergeur) sont repliés dans « Options ». -->
+      <div class="watch">
 
-        <div class="player-main">
-          <div class="player-head">
-            <div class="player-title">
-              <h1 id="h-player" class="now-title">Aucun épisode chargé</h1>
-              <p class="now-meta" id="nowMeta">Choisis un anime dans « Découvrir », puis un épisode.</p>
-            </div>
-            <div class="player-badges">
-              <span class="chip chip-accent" id="formatBadge">En attente</span>
-              <button type="button" class="icon-btn" id="favCurrentBtn" title="Ajouter aux favoris" aria-pressed="false" hidden>
-                <svg aria-hidden="true"><use href="#i-star"/></svg>
-              </button>
-            </div>
-          </div>
-
+        <div class="watch-main">
           <div class="player-stage" id="playerStage">
             <div class="player-placeholder" id="playerPlaceholder">
               <svg class="ph-icon" aria-hidden="true"><use href="#i-play"/></svg>
-              <p class="ph-title">Le lecteur est prêt</p>
-              <p class="ph-text">Sélectionne un anime, une saison et un épisode pour lancer la lecture.</p>
-              <button type="button" class="btn btn-ghost" data-nav="discover">Parcourir les animes</button>
+              <p class="ph-title">Rien en cours de lecture</p>
+              <p class="ph-text">Choisis un anime depuis l'accueil ou le catalogue, puis un épisode.</p>
+              <button type="button" class="btn btn-primary" data-nav="discover">Parcourir les animes</button>
             </div>
             <video id="video" playsinline controls preload="metadata" hidden></video>
             <iframe id="frame" title="Lecteur externe" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms allow-popups" hidden></iframe>
-            <div class="stage-overlay" id="stageLoader" hidden><span class="spinner" aria-hidden="true"></span><span>Chargement de la source…</span></div>
+            <div class="stage-overlay" id="stageLoader" hidden><span class="spinner" aria-hidden="true"></span><span>Chargement de l'épisode…</span></div>
           </div>
 
           <div class="resume-banner" id="resumeBanner" hidden>
@@ -258,61 +248,72 @@
             <button type="button" class="icon-btn icon-btn-sm" id="resumeDismissBtn" aria-label="Ignorer"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
           </div>
 
-          <div class="player-bar">
-            <button type="button" class="btn btn-ghost" id="prevBtn"><svg aria-hidden="true"><use href="#i-prev"/></svg><span>Précédent</span></button>
-            <button type="button" class="btn btn-ghost" id="nextBtn"><span>Suivant</span><svg aria-hidden="true"><use href="#i-next"/></svg></button>
-            <span class="bar-spacer"></span>
+          <p class="player-note" id="playerNote" hidden></p>
+
+          <div class="watch-head">
+            <div class="player-title">
+              <button type="button" class="now-series" id="nowSeries" hidden></button>
+              <h1 id="h-player" class="now-title">Aucun épisode chargé</h1>
+              <p class="now-meta" id="nowMeta">Choisis un anime depuis l'accueil, puis un épisode.</p>
+            </div>
+            <div class="watch-actions">
+              <button type="button" class="btn btn-ghost" id="prevBtn"><svg aria-hidden="true"><use href="#i-prev"/></svg><span>Précédent</span></button>
+              <button type="button" class="btn btn-primary" id="nextBtn"><span>Épisode suivant</span><svg aria-hidden="true"><use href="#i-next"/></svg></button>
+              <button type="button" class="icon-btn watch-fav" id="favCurrentBtn" title="Ajouter à ma liste" aria-label="Ajouter à ma liste" aria-pressed="false" hidden>
+                <svg aria-hidden="true"><use href="#i-star"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="watch-tools">
             <label class="switch switch-sm">
               <input type="checkbox" id="autoplayToggle">
               <span class="switch-track" aria-hidden="true"></span>
-              <span>Enchaîner</span>
+              <span>Lecture automatique</span>
             </label>
+            <span class="bar-spacer"></span>
+            <span class="chip chip-sm" id="formatBadge" title="Format de la source en cours">En attente</span>
+            <details class="watch-options">
+              <summary class="btn btn-ghost btn-sm"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Options</span></summary>
+              <div class="watch-options-panel">
+                <div class="field-group">
+                  <label for="modeSelect">Mode de lecture</label>
+                  <select id="modeSelect">
+                    <option value="auto">Automatique (recommandé)</option>
+                    <option value="video">Vidéo intégrée (MP4 / HLS)</option>
+                    <option value="iframe">Page du lecteur (iframe)</option>
+                  </select>
+                </div>
+                <div class="field-group" id="sourceField" hidden>
+                  <label for="sourceSelect">Hébergeur</label>
+                  <select id="sourceSelect"></select>
+                </div>
+              </div>
+            </details>
             <button type="button" class="icon-btn" id="reloadBtn" title="Recharger la source" aria-label="Recharger la source"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
-            <button type="button" class="icon-btn" id="fullscreenBtn" title="Plein écran" aria-label="Plein écran"><svg aria-hidden="true"><use href="#i-expand"/></svg></button>
+            <button type="button" class="icon-btn" id="fullscreenBtn" title="Plein écran (F)" aria-label="Plein écran"><svg aria-hidden="true"><use href="#i-expand"/></svg></button>
             <button type="button" class="icon-btn" id="openSourceBtn" title="Ouvrir la source dans un onglet" aria-label="Ouvrir la source dans un onglet"><svg aria-hidden="true"><use href="#i-external"/></svg></button>
           </div>
-
-          <p class="player-note" id="playerNote" hidden></p>
         </div>
 
-        <aside class="player-side" aria-label="Sélection de l'épisode">
-          <div class="side-block">
-            <h2 class="side-title">Sélection</h2>
-            <div class="side-grid">
-              <div class="field-group">
-                <label for="seasonSelect">Saison</label>
-                <select id="seasonSelect"><option value="">—</option></select>
-              </div>
-              <div class="field-group">
-                <label for="versionSelect">Version</label>
-                <select id="versionSelect">
-                  <option value="vostfr">VOSTFR</option>
-                  <option value="vf">VF</option>
-                  <option value="va">VA</option>
-                  <option value="vkr">VKR</option>
-                  <option value="vcn">VCN</option>
-                  <option value="vqc">VQC</option>
-                </select>
-              </div>
-            </div>
-            <div class="field-group">
-              <label for="modeSelect">Mode de lecture</label>
-              <select id="modeSelect">
-                <option value="auto">Automatique (recommandé)</option>
-                <option value="video">Vidéo intégrée (MP4 / HLS)</option>
-                <option value="iframe">Page du lecteur (iframe)</option>
-              </select>
-            </div>
-            <div class="field-group" id="sourceField" hidden>
-              <label for="sourceSelect">Hébergeur</label>
-              <select id="sourceSelect"></select>
-            </div>
-          </div>
-
-          <div class="side-block grow">
-            <div class="side-head">
-              <h2 class="side-title">Épisodes <span class="chip chip-sm" id="episodeCount" hidden>0</span></h2>
+        <aside class="watch-side" aria-label="Épisodes">
+          <div class="episodes-panel">
+            <div class="ep-head">
+              <h2 class="ep-title">Épisodes <span class="chip chip-sm" id="episodeCount" hidden>0</span></h2>
               <button type="button" class="icon-btn icon-btn-sm" id="reloadEpisodesBtn" title="Recharger la liste" aria-label="Recharger la liste des épisodes"><svg aria-hidden="true"><use href="#i-refresh"/></svg></button>
+            </div>
+            <div class="ep-controls">
+              <label class="sr-only" for="seasonSelect">Saison</label>
+              <select id="seasonSelect" class="select-soft"><option value="">—</option></select>
+              <label class="sr-only" for="versionSelect">Version</label>
+              <select id="versionSelect" class="select-soft">
+                <option value="vostfr">VOSTFR</option>
+                <option value="vf">VF</option>
+                <option value="va">VA</option>
+                <option value="vkr">VKR</option>
+                <option value="vcn">VCN</option>
+                <option value="vqc">VQC</option>
+              </select>
             </div>
             <div class="episode-list" id="episodeList" aria-live="polite"></div>
           </div>
@@ -324,12 +325,12 @@
     <section class="view" id="view-favorites" data-view="favorites" aria-labelledby="h-favorites">
       <div class="view-head">
         <div>
-          <h1 id="h-favorites">Favoris</h1>
-          <p class="view-sub">Tes animes épinglés, conservés dans ce navigateur.</p>
+          <h1 id="h-favorites">Ma liste</h1>
+          <p class="view-sub">Les séries que tu gardes sous la main, conservées dans ce navigateur.</p>
         </div>
         <div class="view-actions">
           <div class="field">
-            <label class="sr-only" for="favSort">Trier les favoris</label>
+            <label class="sr-only" for="favSort">Trier ma liste</label>
             <select id="favSort">
               <option value="recent">Ajout récent</option>
               <option value="az">Titre A → Z</option>
@@ -348,7 +349,7 @@
           <p class="view-sub">Reprends une lecture là où tu t'es arrêté.</p>
         </div>
         <div class="view-actions">
-          <button type="button" class="btn btn-danger" id="clearHistoryBtn"><svg aria-hidden="true"><use href="#i-trash"/></svg><span>Tout effacer</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" id="clearHistoryBtn"><svg aria-hidden="true"><use href="#i-trash"/></svg><span>Tout effacer</span></button>
         </div>
       </div>
 
@@ -363,17 +364,17 @@
     <section class="view" id="view-scans" data-view="scans" aria-labelledby="h-scans">
       <div class="view-head">
         <div>
-          <h1 id="h-scans">Lecteur de scans</h1>
-          <p class="view-sub">Chapitres fournis par les routes <code>getScanHashmap</code> et <code>getScanLink</code> de l'API.</p>
+          <h1 id="h-scans">Scans</h1>
+          <p class="view-sub">Lis les chapitres d'un manga directement ici, page après page ou en défilement continu.</p>
         </div>
       </div>
 
-      <form class="searchbar" id="scanForm">
+      <form class="searchbar scan-search" id="scanForm">
         <div class="field grow">
-          <svg class="field-icon" aria-hidden="true"><use href="#i-book"/></svg>
-          <input id="scanInput" type="search" placeholder="Nom du manga (ex. Frieren)" aria-label="Nom du manga" autocomplete="off">
+          <svg class="field-icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <input id="scanInput" type="search" placeholder="Titre du manga, ex. Frieren" aria-label="Titre du manga" autocomplete="off" enterkeyhint="search">
         </div>
-        <button type="submit" class="btn btn-primary">Charger les chapitres</button>
+        <button type="submit" class="btn btn-primary">Ouvrir</button>
       </form>
 
       <div class="scan-layout">
@@ -401,60 +402,6 @@
       </div>
 
       <div class="settings-grid">
-
-        <section class="panel">
-          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-plug"/></svg> Connexion à l'API</h2>
-          <div class="field-group">
-            <label for="apiInput">URL du backend AnimeSamaApi</label>
-            <input id="apiInput" type="url" inputmode="url" spellcheck="false" placeholder="(vide = même origine que cette page)">
-            <p class="hint">Laisse ce champ <strong>vide</strong> si tu lances le panel avec <code>serve.py</code> : l'API est alors relayée sur la même origine et le CORS ne se pose plus. Sinon, le backend doit autoriser le CORS (voir le README).</p>
-          </div>
-          <div class="field-group">
-            <label for="timeoutInput">Délai d'attente maximal (secondes)</label>
-            <input id="timeoutInput" type="number" min="3" max="600" step="1">
-            <p class="hint">Le premier appel à <code>getAnimeLink</code> peut être long : l'API scrape la page à la volée.</p>
-          </div>
-          <div class="panel-actions">
-            <button type="button" class="btn btn-primary" id="testApiBtn"><svg aria-hidden="true"><use href="#i-plug"/></svg><span>Tester la connexion</span></button>
-            <button type="button" class="btn btn-ghost" id="resolveDomainBtn">Domaine Anime-Sama actif</button>
-          </div>
-          <pre class="diag" id="apiDiag" hidden></pre>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-palette"/></svg> Apparence</h2>
-            <button type="button" class="btn btn-ghost btn-sm" id="themeBtn" title="Passer au thème suivant"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>Thème suivant</span></button>
-          </div>
-          <div class="field-group">
-            <label for="themeSelect">Thème</label>
-            <select id="themeSelect">
-              <option value="dark">Nocturne (défaut)</option>
-              <option value="abyss">Abysse (noir OLED)</option>
-              <option value="light">Clair</option>
-            </select>
-          </div>
-          <fieldset class="field-group">
-            <legend>Couleur d'accentuation</legend>
-            <div class="accent-row" id="accentRow" role="radiogroup" aria-label="Couleur d'accentuation">
-              <button type="button" class="accent" data-accent="ember" style="--sw:#FF9142" role="radio" aria-checked="true" aria-label="Braise"></button>
-              <button type="button" class="accent" data-accent="cyan" style="--sw:#22C8E6" role="radio" aria-checked="false" aria-label="Cyan"></button>
-              <button type="button" class="accent" data-accent="rose" style="--sw:#FF7BA5" role="radio" aria-checked="false" aria-label="Rose"></button>
-              <button type="button" class="accent" data-accent="emerald" style="--sw:#2DD4A7" role="radio" aria-checked="false" aria-label="Émeraude"></button>
-              <button type="button" class="accent" data-accent="violet" style="--sw:#A08CFF" role="radio" aria-checked="false" aria-label="Violet"></button>
-            </div>
-          </fieldset>
-          <label class="switch">
-            <input type="checkbox" id="motionToggle">
-            <span class="switch-track" aria-hidden="true"></span>
-            <span>Réduire les animations</span>
-          </label>
-          <label class="switch">
-            <input type="checkbox" id="compactToggle">
-            <span class="switch-track" aria-hidden="true"></span>
-            <span>Affichage compact des cartes</span>
-          </label>
-        </section>
 
         <section class="panel">
           <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-play"/></svg> Lecture</h2>
@@ -505,6 +452,41 @@
         </section>
 
         <section class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-palette"/></svg> Apparence</h2>
+            <button type="button" class="btn btn-ghost btn-sm" id="themeBtn" title="Passer au thème suivant"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>Thème suivant</span></button>
+          </div>
+          <div class="field-group">
+            <label for="themeSelect">Thème</label>
+            <select id="themeSelect">
+              <option value="dark">Nocturne (défaut)</option>
+              <option value="abyss">Abysse (noir OLED)</option>
+              <option value="light">Clair</option>
+            </select>
+          </div>
+          <fieldset class="field-group">
+            <legend>Couleur d'accentuation</legend>
+            <div class="accent-row" id="accentRow" role="radiogroup" aria-label="Couleur d'accentuation">
+              <button type="button" class="accent" data-accent="ember" style="--sw:#FF9142" role="radio" aria-checked="true" aria-label="Braise"></button>
+              <button type="button" class="accent" data-accent="cyan" style="--sw:#22C8E6" role="radio" aria-checked="false" aria-label="Cyan"></button>
+              <button type="button" class="accent" data-accent="rose" style="--sw:#FF7BA5" role="radio" aria-checked="false" aria-label="Rose"></button>
+              <button type="button" class="accent" data-accent="emerald" style="--sw:#2DD4A7" role="radio" aria-checked="false" aria-label="Émeraude"></button>
+              <button type="button" class="accent" data-accent="violet" style="--sw:#A08CFF" role="radio" aria-checked="false" aria-label="Violet"></button>
+            </div>
+          </fieldset>
+          <label class="switch">
+            <input type="checkbox" id="motionToggle">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Réduire les animations</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="compactToggle">
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Affichage compact des cartes</span>
+          </label>
+        </section>
+
+        <section class="panel">
           <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-download"/></svg> Mes données</h2>
           <dl class="stats" id="statsList"></dl>
           <div class="panel-actions">
@@ -515,10 +497,29 @@
           </div>
         </section>
 
+        <section class="panel">
+          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-plug"/></svg> Connexion à l'API</h2>
+          <div class="field-group">
+            <label for="apiInput">URL du backend AnimeSamaApi</label>
+            <input id="apiInput" type="url" inputmode="url" spellcheck="false" placeholder="(vide = même origine que cette page)">
+            <p class="hint">Laisse ce champ <strong>vide</strong> si tu lances le panel avec <code>serve.py</code> : l'API est alors relayée sur la même origine et le CORS ne se pose plus. Sinon, le backend doit autoriser le CORS (voir le README).</p>
+          </div>
+          <div class="field-group">
+            <label for="timeoutInput">Délai d'attente maximal (secondes)</label>
+            <input id="timeoutInput" type="number" min="3" max="600" step="1">
+            <p class="hint">Le premier appel à <code>getAnimeLink</code> peut être long : l'API scrape la page à la volée.</p>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-primary" id="testApiBtn"><svg aria-hidden="true"><use href="#i-plug"/></svg><span>Tester la connexion</span></button>
+            <button type="button" class="btn btn-ghost" id="resolveDomainBtn">Domaine Anime-Sama actif</button>
+          </div>
+          <pre class="diag" id="apiDiag" hidden></pre>
+        </section>
+
         <section class="panel panel-wide">
           <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-info"/></svg> Raccourcis clavier</h2>
           <ul class="shortcuts">
-            <li><kbd>/</kbd> Recherche rapide</li>
+            <li><kbd>/</kbd> Rechercher</li>
             <li><kbd>Espace</kbd> / <kbd>K</kbd> Lecture · pause</li>
             <li><kbd>←</kbd> <kbd>→</kbd> Reculer · avancer de 5 s</li>
             <li><kbd>J</kbd> <kbd>L</kbd> Reculer · avancer de 10 s</li>
@@ -529,7 +530,6 @@
             <li><kbd>Échap</kbd> Fermer la fenêtre modale</li>
           </ul>
         </section>
-
       </div>
     </section>
 

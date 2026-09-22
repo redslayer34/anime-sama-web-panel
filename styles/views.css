@@ -247,6 +247,9 @@ main {
 .section-title:first-child { margin-top: 0 }
 
 .searchbar { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3) }
+.scan-search { max-width: 640px; margin-bottom: var(--sp-6) }
+.scan-search input { height: 44px; border-radius: var(--r-full); padding-left: 42px }
+.scan-search .btn { height: 44px; border-radius: var(--r-full); padding-inline: var(--sp-6) }
 .toolbar {
   display: flex;
   align-items: center;
@@ -351,12 +354,17 @@ main {
     linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, transparent 22%),
     radial-gradient(80% 90% at 0% 100%, var(--hero-tint, transparent) 0%, transparent 70%);
 }
+/* Thème clair : le héros reste une bannière sombre, bordée net. Le fondre
+   dans le fond clair produisait une bande grise où tombait le titre de la
+   première rangée. */
+:root[data-theme="light"] .hero { background: #0b0c0f }
 :root[data-theme="light"] .hero-tint {
   background:
     linear-gradient(90deg, rgba(8, 10, 14, .92) 0%, rgba(8, 10, 14, .6) 34%, transparent 64%),
-    linear-gradient(0deg, var(--bg) 0%, transparent 24%),
+    linear-gradient(0deg, rgba(8, 10, 14, .85) 0%, transparent 34%),
     linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, transparent 22%);
 }
+:root[data-theme="light"] #homeRails { margin-top: var(--sp-7) }
 :root[data-theme="light"] .hero-body { color: #fff }
 :root[data-theme="light"] .hero-sub { color: rgba(255, 255, 255, .8) }
 
@@ -499,29 +507,17 @@ main {
 .rail-more:hover { color: var(--accent-text); gap: 6px }
 .rail-section { margin-bottom: var(--sp-8) }
 
-/* ════════ Lecteur ════════════════════════════════════════════════ */
-.player-layout {
+/* ════════ Lecteur : page de visionnage ═══════════════════════════
+   La vidéo d'abord, sur fond noir ; le titre et les actions dessous ; les
+   épisodes à droite. Rien de technique au premier plan : le format de la
+   source et le mode de lecture sont relégués dans la barre d'outils. */
+.watch {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: var(--sp-5);
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--sp-6);
   align-items: start;
 }
-.player-main { min-width: 0 }
-.player-head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
-}
-.player-title { flex: 1 1 auto; min-width: 0 }
-.now-title {
-  font-family: var(--font-display);
-  font-size: clamp(var(--fs-xl), 2.4vw, var(--fs-2xl));
-  font-weight: 700;
-  letter-spacing: -.025em;
-}
-.now-meta { margin-top: var(--sp-1); color: var(--muted); font-size: var(--fs-sm) }
-.player-badges { display: flex; align-items: center; gap: var(--sp-2); flex: none }
+.watch-main { min-width: 0 }
 
 .player-stage {
   position: relative;
@@ -529,7 +525,7 @@ main {
   overflow: hidden;
   border-radius: var(--r-lg);
   background: #000;
-  box-shadow: var(--shadow-3);
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .9), 0 0 0 1px rgba(255, 255, 255, .05);
 }
 .player-stage > video,
 .player-stage > iframe {
@@ -549,13 +545,21 @@ main {
   padding: var(--sp-6);
   text-align: center;
   background:
-    radial-gradient(70% 60% at 50% 40%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
-    var(--surface-1);
+    radial-gradient(60% 70% at 50% 45%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    #07080a;
 }
-.ph-icon { width: 40px; height: 40px; color: var(--accent); fill: currentColor; stroke: none; opacity: .9 }
-.ph-title { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 700; color: var(--text) }
-.ph-text { font-size: var(--fs-sm); color: var(--muted); max-width: 44ch }
-.player-placeholder .btn { margin-top: var(--sp-2) }
+.ph-icon {
+  width: 64px; height: 64px;
+  padding: 18px;
+  margin-bottom: var(--sp-2);
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  fill: currentColor; stroke: none;
+}
+.ph-title { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: 700; color: #fff }
+.ph-text { font-size: var(--fs-sm); color: rgba(255, 255, 255, .7); max-width: 44ch }
+.player-placeholder .btn { margin-top: var(--sp-3) }
 
 .stage-overlay {
   position: absolute;
@@ -570,18 +574,78 @@ main {
   font-size: var(--fs-sm);
 }
 
-.player-bar {
+/* ── Titre et actions ── */
+.watch-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+.player-title { flex: 1 1 280px; min-width: 0 }
+.now-series {
+  display: inline-block;
+  max-width: 100%;
+  margin-bottom: var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.now-series:hover { text-decoration: underline; text-underline-offset: 3px }
+.now-title {
+  font-family: var(--font-display);
+  font-size: clamp(var(--fs-xl), 2.6vw, var(--fs-3xl));
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.03em;
+}
+.now-meta { margin-top: var(--sp-1); color: var(--muted); font-size: var(--fs-sm) }
+.watch-actions { display: flex; align-items: center; gap: var(--sp-2); flex: none }
+.watch-fav { border: 1px solid var(--line-strong) }
+
+/* ── Outils : discrets, sous un filet ── */
+.watch-tools {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
   flex-wrap: wrap;
-  margin-top: var(--sp-3);
-  padding: var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface-1);
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
 }
 .bar-spacer { flex: 1 1 auto }
+.watch-tools #formatBadge { background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--muted) }
+
+.watch-options { position: relative }
+.watch-options > summary { list-style: none; cursor: pointer }
+.watch-options > summary::-webkit-details-marker { display: none }
+.watch-options[open] > summary { background: var(--surface-2) }
+.watch-options-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--sp-2));
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: 300px;
+  padding: var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-3);
+  animation: fade-up var(--t) var(--ease) both;
+}
+
 .player-note {
   margin-top: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
@@ -607,15 +671,48 @@ main {
 .resume-banner > span { flex: 1 1 auto; min-width: 0 }
 .index-banner { margin: 0 0 var(--sp-5); border-color: var(--line-strong); background: var(--surface-2) }
 
-.player-side { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0 }
+/* ── Colonne des épisodes ── */
+.watch-side { position: sticky; top: calc(var(--topbar-h) + var(--sp-4)); min-width: 0 }
+.episodes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-height: calc(100vh - var(--topbar-h) - var(--sp-8));
+  padding: var(--sp-4);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.ep-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2) }
+.ep-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.ep-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2) }
+.select-soft { height: 38px; background-color: var(--surface-2); border-color: transparent; font-weight: 600 }
+.episodes-panel .episode-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin-inline: calc(var(--sp-2) * -1);
+  padding-inline: var(--sp-2);
+  overscroll-behavior: contain;
+}
+
+/* ── Bloc latéral générique (chapitres des scans) ── */
 .side-block {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   padding: var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-lg);
   background: var(--surface-1);
+  box-shadow: 0 0 0 1px var(--line);
   min-width: 0;
 }
 .side-head { display: flex; align-items: center; gap: var(--sp-2) }
@@ -629,13 +726,14 @@ main {
   color: var(--faint);
 }
 .side-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3) }
-.side-block.grow .episode-list { max-height: min(56vh, 560px); overflow-y: auto; margin-inline: calc(var(--sp-2) * -1) }
 
 /* ════════ Scans ══════════════════════════════════════════════════ */
 .scan-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--sp-5); align-items: start }
 .scan-chapters { position: sticky; top: calc(var(--header-h) + var(--sp-4)); max-height: 76vh }
 .scan-chapters .chapter-list { max-height: 56vh }
 .scan-reader { min-width: 0 }
+.scan-layout[data-empty] { grid-template-columns: minmax(0, 1fr) }
+.scan-layout[data-empty] .scan-chapters { display: none }
 
 .scan-toolbar {
   display: flex;               /* l'espaceur .scan-spacer en dépend */
@@ -670,12 +768,11 @@ main {
 .scan-page-error { padding: var(--sp-4); text-align: center }
 
 /* ════════ Réglages ═══════════════════════════════════════════════ */
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: var(--sp-4);
-  align-items: start;
-}
+/* Colonnes « maçonnées » : les panneaux s'empilent sans laisser de trou,
+   quelle que soit leur hauteur. */
+.settings-grid { columns: 3 340px; column-gap: var(--sp-4) }
+.settings-grid > .panel { break-inside: avoid; margin-bottom: var(--sp-4) }
+.settings-grid > .panel-wide { column-span: all }
 .panel {
   display: flex;
   flex-direction: column;
@@ -714,7 +811,7 @@ main {
   overflow: auto;
 }
 
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-3); margin: 0 }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin: 0 }
 .stats > div {
   display: flex;
   flex-direction: column;
@@ -757,13 +854,15 @@ main {
 }
 
 @media (max-width: 1180px) {
-  .player-layout { grid-template-columns: minmax(0, 1fr) 300px }
+  .watch { grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-5) }
   .scan-layout { grid-template-columns: 240px minmax(0, 1fr) }
 }
 
 @media (max-width: 1000px) {
-  .player-layout, .scan-layout { grid-template-columns: minmax(0, 1fr) }
-  .side-block.grow .episode-list { max-height: 360px }
+  .watch, .scan-layout { grid-template-columns: minmax(0, 1fr) }
+  .watch-side { position: static }
+  .episodes-panel { max-height: none }
+  .episodes-panel .episode-list { max-height: 460px }
   .scan-chapters { position: static; max-height: none }
   .scan-chapters .chapter-list { max-height: 260px }
   .hero-body { max-width: min(640px, 70%) }
@@ -843,7 +942,11 @@ main {
   .searchbar { flex-wrap: wrap }
   .searchbar .btn { flex: 1 1 100% }
   .side-grid { grid-template-columns: 1fr }
-  .player-bar .btn span { display: none }
+  .watch-actions { width: 100% }
+  .watch-actions #nextBtn { flex: 1 1 auto }
+  #prevBtn span { display: none }
+  .watch-tools .switch span:last-child { font-size: var(--fs-xs) }
+  .player-stage { border-radius: var(--r-md); margin-inline: calc(var(--page-pad) * -1); border-radius: 0 }
   .stats { grid-template-columns: 1fr 1fr }
   .row-thumb { display: none }
 }

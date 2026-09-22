@@ -5,7 +5,7 @@ import {
 import { persist, progressKey, state } from "./store.js";
 import { notify } from "./ui.js";
 import { source } from "./api.js";
-import { isFavorite, toggleFavorite } from "./discover.js";
+import { isFavorite, showAnimeDetails, toggleFavorite } from "./discover.js";
 import {
   dropResolved, loadEpisodes, playResolvedEpisode, renderEpisodeStates, resolveEpisodePriority,
   seasonKey
@@ -75,9 +75,11 @@ export function ensureOption(select, value, label) {
 
 export function updatePlayerHeader() {
   if (!player.anime) return;
-  nowTitle.textContent = player.episode
-    ? `${player.anime.title} — Épisode ${player.episode.number}`
-    : player.anime.title;
+  // La série au-dessus, en lien vers sa fiche ; l'épisode en titre.
+  const series = must("#nowSeries");
+  series.textContent = player.anime.title;
+  series.hidden = false;
+  nowTitle.textContent = player.episode ? `Épisode ${player.episode.number}` : player.anime.title;
   const parts = [player.season?.label, player.version?.toUpperCase()].filter(Boolean);
   if (source.isDemo) parts.push("MODE DÉMO");
   nowMeta.textContent = parts.join(" · ") || "—";
@@ -96,7 +98,8 @@ export function updatePlayerFavButton() {
   const active = isFavorite(player.anime.id);
   favCurrentBtn.classList.toggle("is-on", active);
   favCurrentBtn.setAttribute("aria-pressed", String(active));
-  favCurrentBtn.title = active ? "Retirer des favoris" : "Ajouter aux favoris";
+  favCurrentBtn.title = active ? "Retirer de ma liste" : "Ajouter à ma liste";
+  favCurrentBtn.setAttribute("aria-label", favCurrentBtn.title);
 }
 
 export function progressEntry(create = false) {
@@ -251,8 +254,8 @@ function retryThroughRelay() {
 
   player.triedRelay = true;
   const seek = Number.isFinite(video.currentTime) && video.currentTime > 1 ? video.currentTime : player.pendingSeek;
-  notify("Lecture directe refusée par l'hébergeur : nouvelle tentative via le serveur.",
-    { type: "info", title: "Changement de route", timeout: 5000 });
+  notify("L'hébergeur refusait la lecture directe : l'épisode passe maintenant via le serveur.",
+    { type: "info", title: "Lecture via le serveur", timeout: 5000 });
   mountSource(player.current, { seek, relay: true });
   return true;
 }
@@ -310,6 +313,8 @@ export function step(delta, { silent = false } = {}) {
 
 /** Écouteurs du module, branchés par main.js une fois tous les modules évalués. */
 export function wire() {
+  must("#nowSeries").addEventListener("click", () => { if (player.anime) showAnimeDetails(player.anime); });
+
   /* Écouteurs attachés une seule fois : pas d'accumulation entre deux épisodes. */
   video.addEventListener("loadedmetadata", () => {
     setStageLoading(false);

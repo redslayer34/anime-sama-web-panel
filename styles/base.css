@@ -194,6 +194,6 @@ main:focus { outline: none }
 
 /* ── Impression : on ne garde que le contenu ──────────────────────── */
 @media print {
-  .topbar, .sidebar, .toasts, .player-bar, .rail-arrow, .hero { display: none !important }
+  .topbar, .sidebar, .toasts, .watch-tools, .rail-arrow, .hero { display: none !important }
   body { background: #fff; color: #000 }
 }

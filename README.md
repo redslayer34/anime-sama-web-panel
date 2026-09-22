@@ -205,23 +205,33 @@ toi de voir.
 
 ### L'interface
 
-Le panel s'ouvre sur un **accueil** : une série mise en avant, puis des rangées
-horizontales — *Reprendre la lecture*, *Ma liste*, *Populaires*, *Dans le catalogue*.
-Cet accueil est l'état au repos de la vue « Découvrir » : dès qu'une recherche ou le
-catalogue remplit la grille, il s'efface au profit des résultats.
+Une seule barre en haut, comme sur une plateforme : **Accueil · Catalogue · Ma liste ·
+Historique · Scans**, la recherche (touche `/`), les réglages, et un bouton « En cours »
+qui ramène au lecteur. Sur mobile, les onglets passent dans une barre en bas de l'écran.
+
+L'**accueil** s'ouvre sur un héros plein cadre qui fait défiler jusqu'à cinq titres (tes
+reprises d'abord, puis Ma liste, puis une sélection du jour), suivi de rangées
+horizontales : *Reprendre la lecture* (avec le temps restant), *Ma liste*, *Sélection du
+jour*, *À découvrir*. Les affiches restent nues au repos ; survolées, elles montrent la
+lecture et l'étoile, et un clic ouvre la **fiche** de la série (grande image, reprise,
+Ma liste, saisons). Toucher « Accueil » quand on y est déjà ramène au début.
+
+La **page de lecture** met la vidéo en premier, le titre et « Épisode suivant » dessous,
+les épisodes (saison, version) à droite ; le mode de lecture et l'hébergeur sont rangés
+dans « Options ».
 
 Les **jaquettes** viennent du catalogue d'Anime-Sama, qui en fournit une par fiche. Le
 panel tente d'abord l'URL directe, bascule sur sa propre route `/img` si l'hébergeur
 refuse (protection anti-hotlink, ou CDN filtré par le réseau), et dessine en dernier
 recours une affiche dérivée du titre — stable d'une session à l'autre, jamais une image
-cassée. Les jaquettes des séries ouvertes ou mises en favori sont mémorisées, pour que
+cassée. Les jaquettes des séries ouvertes ou ajoutées à Ma liste sont mémorisées, pour que
 « Ma liste », l'historique et les reprises en profitent aussi.
 
 ### Sans backend, immédiatement
 
-- Navigation entre les six vues, thèmes (Sombre / Abysse OLED / Clair), 5 couleurs
+- Navigation entre les vues, thèmes (Sombre / Abysse OLED / Clair), 5 couleurs
   d'accentuation, mode compact, réduction des animations.
-- Favoris, historique, progression, réglages : tout est enregistré dans `localStorage`,
+- Ma liste, historique, progression, réglages : tout est enregistré dans `localStorage`,
   exportable et réimportable en JSON.
 - Filtrage instantané, tri, états vides et messages d'erreur.
 - **Mode démo** (Paramètres → Lecture) : jeu de données local et vidéos de test libres de
@@ -313,7 +323,7 @@ du `<script>` par `hls.min.js`.
 
 | Touche | Action |
 |---|---|
-| `/` | Recherche rapide |
+| `/` | Aller à la recherche |
 | `1` … `6` | Changer de vue |
 | `Espace` / `K` | Lecture · pause |
 | `←` `→` | Reculer · avancer de 5 s |

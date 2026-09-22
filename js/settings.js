@@ -63,7 +63,7 @@ function renderStats() {
   const watched = Object.values(state.progress)
     .reduce((total, entry) => total + Object.values(entry.episodes || {}).filter((e) => e.done).length, 0);
   const rows = [
-    ["Favoris", state.favorites.length],
+    ["Ma liste", state.favorites.length],
     ["Historique", state.history.length],
     ["Séries suivies", Object.keys(state.progress).length],
     ["Épisodes terminés", watched],
@@ -257,7 +257,7 @@ export function wire() {
   must("#resetBtn").addEventListener("click", async () => {
     const ok = await confirmDialog({
       title: "Tout réinitialiser ?",
-      message: "Favoris, historique, progression, réglages et catalogue en cache seront supprimés définitivement de ce navigateur.",
+      message: "Ma liste, historique, progression, réglages et catalogue en cache seront supprimés définitivement de ce navigateur.",
       confirmLabel: "Tout supprimer",
       danger: true,
     });

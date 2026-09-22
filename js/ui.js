@@ -13,7 +13,10 @@ export function notify(message, { type = "info", title = "", timeout = 5200 } = 
     el("span", { text: message }),
   ]);
   const close = el("button", { type: "button", class: "toast-close", "aria-label": "Fermer la notification" }, icon("close"));
-  const toast = el("div", { class: "toast", dataset: { type } }, [icon(TOAST_ICONS[type] || "info"), body, close]);
+  const key = `${type}|${title}|${message}`;
+  const toast = el("div", { class: "toast", dataset: { type, key } }, [icon(TOAST_ICONS[type] || "info"), body, close]);
+  // Un message identique déjà affiché est remplacé, pas empilé.
+  for (const same of toastHost.querySelectorAll(".toast")) if (same.dataset.key === key) same.remove();
 
   const dismiss = () => {
     if (!toast.isConnected) return;

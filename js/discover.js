@@ -74,13 +74,13 @@ export function toggleFavorite(anime) {
   const index = state.favorites.findIndex((f) => f.id === anime.id);
   if (index >= 0) {
     state.favorites.splice(index, 1);
-    notify(`« ${anime.title} » retiré des favoris.`, { type: "info", timeout: 3200 });
+    notify(`« ${anime.title} » retiré de ma liste.`, { type: "info", timeout: 3200 });
   } else {
     state.favorites.unshift({
       id: anime.id, title: anime.title, url: anime.url || null,
       cover: coverFor(anime), addedAt: Date.now(),
     });
-    notify(`« ${anime.title} » ajouté aux favoris.`, { type: "success", timeout: 3200 });
+    notify(`« ${anime.title} » ajouté à ma liste.`, { type: "success", timeout: 3200 });
   }
   rememberCover(anime);
   persist();
@@ -108,7 +108,7 @@ function refreshFavMarks() {
     const active = isFavorite(id);
     button.classList.toggle("is-on", active);
     button.setAttribute("aria-pressed", String(active));
-    const label = active ? "Retirer des favoris" : "Ajouter aux favoris";
+    const label = active ? "Retirer de ma liste" : "Ajouter à ma liste";
     button.setAttribute("title", label);
     button.setAttribute("aria-label", label);
   }
@@ -137,8 +137,8 @@ function favButton(anime) {
     dataset: { favFor: anime.id },
     class: `icon-btn icon-btn-sm card-fav${active ? " is-on" : ""}`,
     "aria-pressed": String(active),
-    title: active ? "Retirer des favoris" : "Ajouter aux favoris",
-    "aria-label": active ? "Retirer des favoris" : "Ajouter aux favoris",
+    title: active ? "Retirer de ma liste" : "Ajouter à ma liste",
+    "aria-label": active ? "Retirer de ma liste" : "Ajouter à ma liste",
     onclick: () => toggleFavorite(anime),
   }, icon("star"));
 }
@@ -317,54 +317,69 @@ async function runSearch(query) {
 
 /** Fiche détaillée d'une série.
 
-    Volontairement courte : les données ne contiennent ni synopsis, ni
-    genres, ni note. Une fiche calquée sur Netflix afficherait des blocs
-    vides ; celle-ci ne montre que ce qu'elle peut tenir — grande affiche,
-    titres, saisons, et les actions utiles.
+    Mise en scène comme sur une plateforme : l'affiche en grand, le titre,
+    les deux actions qui comptent (regarder, Ma liste), puis les saisons.
+    Volontairement sans synopsis, genres ni note : les données n'en
+    contiennent pas, et une fiche qui imiterait Netflix afficherait des
+    blocs vides.
 
     Tous les boutons doivent porter type="button" : la modale est un
     <form method="dialog">, un bouton sans type la refermerait au clic. */
 export async function showAnimeDetails(anime) {
   const progress = latestProgress(anime.id);
-  const seasonsBox = el("div", { class: "detail-seasons" },
-    el("p", { class: "hint", text: "Chargement des saisons…" }));
+  const saved = progress?.episodes?.[progress.lastEpisode];
+  const ratio = saved?.d ? clamp(saved.t / saved.d, 0, 1) : 0;
+  const left = saved?.d && !saved.done ? Math.max(1, Math.round((saved.d - saved.t) / 60)) : null;
 
-  const actions = el("div", { class: "detail-actions" }, [
-    el("button", {
-      type: "button", class: "btn btn-primary",
-      onclick: () => { closeModal(); openAnime(anime, progress
-        ? { seasonSlug: progress.seasonSlug, version: progress.version, episode: progress.lastEpisode }
-        : {}); },
-    }, [icon("play"), el("span", { text: progress ? `Reprendre à l'épisode ${progress.lastEpisode}` : "Regarder" })]),
-    el("button", {
-      type: "button", class: `btn btn-ghost${isFavorite(anime.id) ? " is-on" : ""}`,
-      onclick: (event) => {
-        toggleFavorite(anime);
-        const on = isFavorite(anime.id);
-        event.currentTarget.classList.toggle("is-on", on);
-        event.currentTarget.querySelector("span").textContent = on ? "Dans ma liste" : "Ajouter à ma liste";
-      },
-    }, [icon("star"), el("span", { text: isFavorite(anime.id) ? "Dans ma liste" : "Ajouter à ma liste" })]),
-  ]);
+  const listButton = el("button", { type: "button", class: "btn btn-glass btn-lg" });
+  const syncList = () => {
+    const on = isFavorite(anime.id);
+    listButton.classList.toggle("is-on", on);
+    listButton.setAttribute("aria-pressed", String(on));
+    clear(listButton);
+    listButton.append(icon(on ? "check" : "plus"), el("span", { text: "Ma liste" }));
+  };
+  listButton.addEventListener("click", () => { toggleFavorite(anime); syncList(); });
+  syncList();
+
+  const play = el("button", {
+    type: "button", class: "btn btn-primary btn-lg",
+    onclick: () => { closeModal(); openAnime(anime, progress
+      ? { seasonSlug: progress.seasonSlug, version: progress.version, episode: progress.lastEpisode }
+      : {}); },
+  }, [icon("play"), el("span", { text: progress ? `Reprendre l'épisode ${progress.lastEpisode}` : "Regarder" })]);
+
+  const seasonsBox = el("div", { class: "season-list" },
+    Array.from({ length: 3 }, () => el("div", { class: "skeleton season-skeleton" })));
 
   const fiche = safeUrl(anime.url);   // revalidé : un favori importé d'un JSON tiers pourrait porter une URL forgée
   const body = el("div", { class: "detail" }, [
-    el("div", { class: "detail-poster" }, posterBox(anime, { eager: true })),
-    el("div", { class: "detail-body" }, [
-      anime.alt ? el("p", { class: "detail-alt", text: anime.alt }) : null,
-      el("div", { class: "detail-chips" }, [
-        Number.isFinite(anime.score) ? el("span", { class: "chip chip-sm", text: `Score ${anime.score}` }) : null,
-        progress ? el("span", { class: "chip chip-sm chip-accent", text: `${progress.seasonLabel} · Ép. ${progress.lastEpisode}` }) : null,
+    el("div", { class: "detail-hero" }, [
+      posterBox(anime, { className: "hero-ambient", eager: true }),
+      posterBox(anime, { className: "detail-art", eager: true }),
+      el("div", { class: "detail-shade", "aria-hidden": "true" }),
+      el("div", { class: "detail-head" }, [
+        el("p", { class: "hero-eyebrow", text: progress ? "En cours" : "Série" }),
+        el("h2", { class: "detail-title", text: anime.title }),
+        anime.alt ? el("p", { class: "detail-alt", text: anime.alt }) : null,
+        progress ? el("div", { class: "detail-progress" }, [
+          ratio > 0 ? el("span", { class: "hero-progress", "aria-hidden": "true" },
+            el("i", { style: { width: `${ratio * 100}%` } })) : null,
+          el("span", { text: [`${progress.seasonLabel} · Épisode ${progress.lastEpisode}`, left ? `${left} min restantes` : null].filter(Boolean).join(" · ") }),
+        ]) : null,
+        el("div", { class: "detail-actions" }, [play, listButton]),
       ]),
-      actions,
+    ]),
+    el("div", { class: "detail-content" }, [
+      el("h3", { class: "detail-section", text: "Saisons et films" }),
       seasonsBox,
       fiche ? el("a", {
         class: "detail-link", href: fiche, target: "_blank", rel: "noopener noreferrer nofollow",
-      }, [icon("external"), el("span", { text: "Voir la fiche d'origine" })]) : null,
+      }, [icon("external"), el("span", { text: "Voir la fiche sur Anime-Sama" })]) : null,
     ]),
   ]);
 
-  openModal({ title: anime.title, body, variant: "detail", actions: [{ label: "Fermer", variant: "btn-ghost" }] });
+  openModal({ title: anime.title, body, variant: "detail" });
 
   try {
     const seasons = await source.seasons(anime);
@@ -373,11 +388,27 @@ export async function showAnimeDetails(anime) {
       seasonsBox.append(el("p", { class: "hint", text: "Aucune saison n'a été renvoyée par l'API pour ce titre." }));
       return;
     }
-    seasonsBox.append(el("p", { class: "side-title", text: `${seasons.length} saison${seasons.length > 1 ? "s" : ""}` }));
-    seasonsBox.append(el("div", { class: "detail-season-list" }, seasons.map((season) => el("button", {
-      type: "button", class: "chip",
-      onclick: () => { closeModal(); openAnime(anime, { seasonSlug: season.slug }); },
-    }, season.label))));
+    for (const season of seasons) {
+      // Où en est-on dans cette saison ? La reprise la plus récente, toutes versions confondues.
+      let current = null;
+      for (const entry of Object.values(state.progress)) {
+        if (entry.animeId !== anime.id || entry.seasonSlug !== season.slug || entry.lastEpisode == null) continue;
+        if (!current || (entry.updatedAt || 0) > (current.updatedAt || 0)) current = entry;
+      }
+      seasonsBox.append(el("button", {
+        type: "button", class: `season-card${current ? " is-current" : ""}`,
+        onclick: () => {
+          closeModal();
+          openAnime(anime, current
+            ? { seasonSlug: season.slug, version: current.version, episode: current.lastEpisode }
+            : { seasonSlug: season.slug });
+        },
+      }, [
+        el("span", { class: "season-name", text: season.label }),
+        el("span", { class: "season-sub", text: current ? `Reprendre à l'épisode ${current.lastEpisode}` : "Commencer" }),
+        icon("play", "season-play"),
+      ]));
+    }
   } catch (err) {
     clear(seasonsBox);
     seasonsBox.append(el("p", { class: "hint", text: describeError(err) }));

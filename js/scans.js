@@ -19,6 +19,15 @@ export function renderChapters() {
 
   chapterCount.textContent = String(scans.chapters.length);
   chapterCount.hidden = scans.chapters.length === 0;
+  // Tant qu'aucun manga n'est ouvert, la colonne des chapitres n'a rien à
+  // dire : le lecteur prend toute la largeur et explique quoi faire.
+  scanReader.closest(".scan-layout").toggleAttribute("data-empty", scans.chapters.length === 0);
+  if (!scans.chapters.length && !scanReader.childElementCount) {
+    scanReader.append(emptyState({
+      glyph: "book", title: "Aucun manga ouvert",
+      text: "Cherche un titre ci-dessus : ses chapitres apparaîtront ici, prêts à être lus.",
+    }));
+  }
 
   if (!items.length) {
     chapterList.append(el("p", { class: "hint", text: scans.chapters.length ? "Aucun chapitre ne correspond." : "Charge un manga pour voir ses chapitres." }));

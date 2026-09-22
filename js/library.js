@@ -52,8 +52,8 @@ export function renderFavorites() {
   if (!state.favorites.length) {
     favoritesGrid.append(emptyState({
       glyph: "star",
-      title: "Aucun favori",
-      text: "Clique sur l'étoile d'une carte pour épingler un anime. La liste reste dans ce navigateur.",
+      title: "Ta liste est vide",
+      text: "Survole une affiche et touche l'étoile, ou utilise « Ma liste » dans la fiche d'un anime.",
       action: { label: "Parcourir", onClick: () => navigate("discover") },
     }));
     return;
@@ -166,7 +166,7 @@ export function wire() {
   must("#clearHistoryBtn").addEventListener("click", async () => {
     const ok = await confirmDialog({
       title: "Effacer l'historique ?",
-      message: "L'historique et toutes les positions de lecture enregistrées seront supprimés. Les favoris et les réglages sont conservés.",
+      message: "L'historique et toutes les positions de lecture enregistrées seront supprimés. Ma liste et les réglages sont conservés.",
       confirmLabel: "Tout effacer",
       danger: true,
     });

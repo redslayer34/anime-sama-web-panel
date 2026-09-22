@@ -487,7 +487,7 @@ fieldset.field-group > legend {
   grid-template-columns: repeat(auto-fill, minmax(clamp(128px, 11.5vw, 184px), 1fr));
   gap: var(--sp-6) var(--sp-4);
 }
-.card-grid-wide { grid-template-columns: repeat(auto-fill, minmax(clamp(240px, 24vw, 340px), 1fr)) }
+.card-grid-wide { grid-template-columns: repeat(auto-fill, minmax(clamp(220px, 19vw, 300px), 1fr)) }
 :root[data-compact="1"] .card-grid {
   grid-template-columns: repeat(auto-fill, minmax(clamp(104px, 11vw, 132px), 1fr));
   gap: var(--sp-4) var(--sp-3);
@@ -612,16 +612,17 @@ fieldset.field-group > legend {
 /* ════════ Liste d'épisodes ═══════════════════════════════════════
    `.episode` et ses états sont interrogés globalement par les suites du
    chargement intelligent : ne jamais réutiliser cette classe ailleurs. */
-.episode-list { display: flex; flex-direction: column; gap: var(--sp-1) }
+.episode-list { display: flex; flex-direction: column; gap: 2px }
 .episode {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   width: 100%;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
+  min-height: 52px;
+  padding: var(--sp-2);
+  border: 0;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -631,35 +632,42 @@ fieldset.field-group > legend {
 .episode:hover { background: var(--surface-2) }
 .ep-num {
   flex: none;
-  min-width: 28px; height: 24px;
+  width: 40px; height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 0 var(--sp-1);
-  border-radius: var(--r-xs);
+  border-radius: var(--r-sm);
   background: var(--surface-3);
   color: var(--muted);
-  font-size: var(--fs-xs);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
+.episode:hover .ep-num { color: var(--text) }
 .ep-label {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
+  font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.ep-check { width: 16px; height: 16px; flex: none; color: var(--ok) }
+.ep-check { width: 18px; height: 18px; flex: none; color: var(--ok) }
 .ep-spinner { margin-left: auto; flex: none }
 .ep-bar {
   position: absolute;
-  left: var(--sp-3); bottom: 2px;
-  height: 2px;
+  left: calc(var(--sp-2) + 40px + var(--sp-3)); bottom: 8px;
+  height: 3px;
+  max-width: calc(100% - 40px - var(--sp-2) * 2 - var(--sp-3));
   border-radius: var(--r-full);
   background: var(--accent);
 }
 
-.episode.is-current { background: var(--accent-soft); color: var(--accent-text) }
+/* En cours : la ligne s'allume, le numéro devient un bouton de lecture. */
+.episode.is-current { background: var(--accent-soft); color: var(--text) }
 .episode.is-current .ep-num { background: var(--accent); color: var(--accent-ink) }
+.episode.is-current .ep-label { font-weight: 700 }
 .episode.is-watched .ep-num { color: var(--ok) }
+.episode.is-watched .ep-label { color: var(--muted) }
 .episode.is-unresolved { color: var(--faint) }
 .episode.is-unresolved .ep-num { color: var(--faint); background: transparent; box-shadow: inset 0 0 0 1px var(--line) }
 .episode.is-unresolved:hover { color: var(--text) }
@@ -734,7 +742,7 @@ fieldset.field-group > legend {
   animation: shimmer 1.4s linear infinite;
 }
 .skeleton-poster { aspect-ratio: 2 / 3; border-radius: var(--poster-r) }
-.skeleton-ep { height: 40px; border-radius: var(--r-sm) }
+.skeleton-ep { height: 52px; border-radius: var(--r-md) }
 
 .spinner {
   width: 20px; height: 20px;
@@ -775,7 +783,21 @@ fieldset.field-group > legend {
 .toast > svg { width: 18px; height: 18px; margin-top: 2px; color: var(--faint) }
 .toast-body { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); color: var(--muted) }
 .toast-body b { display: block; color: var(--text); font-size: var(--fs-md); font-weight: 600 }
-.toast-close { flex: none; color: var(--faint) }
+.toast-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px; height: 28px;
+  margin: -4px -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--faint);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.toast-close:hover { background: var(--surface-3); color: var(--text) }
+.toast-close svg { width: 16px; height: 16px }
 .toast[data-type="success"] { border-left-color: var(--ok) }
 .toast[data-type="success"] > svg { color: var(--ok) }
 .toast[data-type="warn"] { border-left-color: var(--warn) }
@@ -863,26 +885,140 @@ fieldset.field-group > legend {
 /* ════════ Fiche détail ═══════════════════════════════════════════
    Habillage de #modal en variante « detail ». Pas de second <dialog> :
    deux dialogues rendraient `dialog[open]` ambigu et le ::backdrop de
-   l'un intercepterait les clics destinés à l'autre. */
-.modal[data-variant="detail"] { width: min(680px, calc(100vw - var(--sp-7))) }
-.modal[data-variant="detail"] .modal-body { padding-top: var(--sp-4) }
+   l'un intercepterait les clics destinés à l'autre.
 
-.detail { display: flex; gap: var(--sp-5); align-items: flex-start }
-.detail-poster { flex: none; width: 168px }
-.detail-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3) }
+   L'en-tête de la modale s'efface : le titre vit sur l'image (le <h2>
+   de l'en-tête reste pour les lecteurs d'écran), la croix flotte dessus. */
+.modal-foot:empty { display: none }
+.modal[data-variant="detail"] {
+  width: min(880px, calc(100vw - var(--sp-5)));
+  max-height: min(92vh, 900px);
+  border-color: var(--line-strong);
+}
+.modal[data-variant="detail"] .modal-head {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  z-index: 3;
+  padding: 0;
+  border: 0;
+}
+.modal[data-variant="detail"] .modal-head h2 {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.modal[data-variant="detail"] #modalClose {
+  width: 40px; height: 40px;
+  border-radius: var(--r-full);
+  background: rgba(0, 0, 0, .5);
+  color: #fff;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.modal[data-variant="detail"] #modalClose:hover { background: rgba(0, 0, 0, .75) }
+.modal[data-variant="detail"] .modal-body { padding: 0; gap: 0; color: var(--text) }
+
+.detail-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  min-height: 400px;
+  background: var(--surface-1);
+}
+.detail-hero .hero-ambient { z-index: -3 }
+.detail-art.poster {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  z-index: -2;
+  width: 64%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 42%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 42%);
+}
+.detail-art .poster-img { object-position: center 22% }
+.detail-art .poster-gen span { display: none }
+.detail-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, var(--surface-1) 0%, color-mix(in srgb, var(--surface-1) 70%, transparent) 38%, transparent 70%),
+    linear-gradient(0deg, var(--surface-1) 0%, transparent 45%);
+}
+.detail-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  max-width: 62%;
+  padding: var(--sp-9) var(--sp-7) var(--sp-6);
+}
+.detail-title {
+  font-family: var(--font-display);
+  font-size: clamp(var(--fs-2xl), 5vw, 52px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -.04em;
+  text-wrap: balance;
+}
 .detail-alt { font-size: var(--fs-md); color: var(--muted) }
-.detail-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2) }
-.detail-chips:empty { display: none }
-.detail-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2) }
-.detail-actions .btn.is-on { border-color: var(--accent-line); color: var(--accent-text) }
-.detail-actions .btn.is-on svg { fill: currentColor; stroke: none }
-.detail-seasons { display: flex; flex-direction: column; gap: var(--sp-2) }
-.detail-season-list { display: flex; flex-wrap: wrap; gap: var(--sp-2) }
-.detail-season-list .chip { cursor: pointer; transition: background var(--t-fast) var(--ease) }
-.detail-season-list .chip:hover { background: var(--accent-soft); color: var(--accent-text) }
+.detail-progress { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--muted) }
+.detail-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2) }
+:root[data-theme="light"] .detail-actions .btn-glass { background: var(--surface-3); color: var(--text); border-color: var(--line-strong) }
+
+.detail-content { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-5) var(--sp-7) var(--sp-7) }
+.detail-section {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.season-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sp-2) }
+.season-skeleton { height: 64px; border-radius: var(--r-md) }
+.season-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-8) var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.season-card:hover { background: var(--surface-3); border-color: var(--line-strong) }
+.season-card.is-current { border-color: var(--accent-line); background: var(--accent-soft) }
+.season-name { font-weight: 700; font-size: var(--fs-md) }
+.season-sub { font-size: var(--fs-xs); color: var(--muted) }
+.season-card.is-current .season-sub { color: var(--accent-text); font-weight: 600 }
+.season-play {
+  position: absolute;
+  right: var(--sp-4);
+  top: 50%;
+  width: 16px; height: 16px;
+  margin-top: -8px;
+  fill: currentColor;
+  stroke: none;
+  opacity: .5;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.season-card:hover .season-play { opacity: 1; color: var(--accent-text) }
 .detail-link {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: var(--sp-2);
   font-size: var(--fs-sm);
   color: var(--muted);
@@ -890,9 +1026,18 @@ fieldset.field-group > legend {
 .detail-link:hover { color: var(--accent-text) }
 .detail-link svg { width: 15px; height: 15px }
 
-@media (max-width: 560px) {
-  .detail { flex-direction: column; align-items: stretch }
-  .detail-poster { width: 132px; margin-inline: auto }
+@media (max-width: 640px) {
+  .detail-hero { min-height: 460px }
+  .detail-art.poster {
+    width: 100%;
+    -webkit-mask-image: linear-gradient(0deg, transparent 10%, #000 62%);
+    mask-image: linear-gradient(0deg, transparent 10%, #000 62%);
+  }
+  .detail-shade { background: linear-gradient(0deg, var(--surface-1) 6%, color-mix(in srgb, var(--surface-1) 70%, transparent) 40%, transparent 72%) }
+  .detail-head { max-width: 100%; padding: var(--sp-9) var(--sp-5) var(--sp-5) }
+  .detail-actions { width: 100% }
+  .detail-actions .btn-primary { flex: 1 1 auto }
+  .detail-content { padding: var(--sp-4) var(--sp-5) var(--sp-6) }
 }
 
 /* ── Échec de démarrage ───────────────────────────────────────────
