@@ -33,6 +33,7 @@ les arrête. **Aucun test ne contacte Anime-Sama** : tout est simulé en local.
 | `browser/relay.test.js` | Bascule vers le relais vidéo et respect des trois réglages. |
 | `browser/smart-loading.test.js` | Chargement intelligent : boutons numérotés avant résolution complète, épisode ciblé jouable en quelques secondes, clic sur un épisode non résolu, fusion en arrière-plan du reste de la saison. |
 | `browser/smart-loading-degraded.test.js` | Dégradation propre face à un backend qui ignore `&e=` (non patché) : tout s'affiche comme avant, sans bouton « non résolu » ni erreur. |
+| `browser/boot.test.js` | Démarrage en modules : tous les modules chargés, fichiers revalidés (`no-cache`, 304), et bandeau qui nomme le module ou l'élément manquant au lieu d'une page inerte. |
 | `browser/episode-cache.test.js` | Cache navigateur des épisodes résolus : série rouverte et lecture sans aucune requête de résolution, rechargement manuel qui repasse par le réseau. |
 
 ## Détails utiles

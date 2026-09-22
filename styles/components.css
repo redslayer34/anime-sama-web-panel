@@ -809,3 +809,23 @@ fieldset.field-group > legend {
   .detail { flex-direction: column; align-items: stretch }
   .detail-poster { width: 132px; margin-inline: auto }
 }
+
+/* ── Échec de démarrage ───────────────────────────────────────────
+   Rempli par le filet de index.html quand les modules ne démarrent pas.
+   Ne dépend d'aucun script : il doit rester lisible même page inerte. */
+.boot-error {
+  position: fixed;
+  inset: var(--sp-4) var(--sp-4) auto;
+  z-index: var(--z-toast);
+  max-width: 720px;
+  margin-inline: auto;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}

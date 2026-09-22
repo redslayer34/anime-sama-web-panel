@@ -1,5 +1,5 @@
 /* Anime-Sama Panel — Notifications, modales et navigation entre les vues. */
-import { $, $$, clear, el, icon, VIEWS } from "./core.js";
+import { $, $$, clear, el, icon, must, VIEWS } from "./core.js";
 import { state } from "./store.js";
 
 const toastHost = $("#toasts");
@@ -25,10 +25,10 @@ export function notify(message, { type = "info", title = "", timeout = 5200 } = 
   if (timeout > 0) setTimeout(dismiss, timeout);
 }
 
-export const modal      = $("#modal");
-const modalTitle = $("#modalTitle");
-const modalBody  = $("#modalBody");
-const modalFoot  = $("#modalFoot");
+export const modal      = must("#modal");
+const modalTitle = must("#modalTitle");
+const modalBody  = must("#modalBody");
+const modalFoot  = must("#modalFoot");
 
 let modalGeneration = 0;
 
@@ -91,7 +91,7 @@ export function navigate(view) {
 
 /** Écouteurs du module, branchés par main.js une fois tous les modules évalués. */
 export function wire() {
-  $("#modalClose").addEventListener("click", closeModal);
+  must("#modalClose").addEventListener("click", closeModal);
 
   window.addEventListener("hashchange", () => applyView(location.hash.slice(1)));
 

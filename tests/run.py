@@ -32,7 +32,7 @@ from lib.ports import free                                    # noqa: E402
 PORTS = {
     "api": 5000, "static": 8080, "auth": 8405,
     "jobs": 8501, "indexing": 8403, "relay": 8602, "video": 9100,
-    "smart": 8603, "smart_degraded": 8604, "cache": 8605,
+    "smart": 8603, "smart_degraded": 8604, "cache": 8605, "boot": 8606,
 }
 SHOTS = TESTS / "screenshots"
 PASSWORD = "mot-de-passe-test"
@@ -229,6 +229,21 @@ def browser_episode_cache():
         stack.stop()
 
 
+def browser_boot():
+    stack = Stack()
+    try:
+        free(PORTS["api"], PORTS["boot"])
+        stack.mock("api.py", PORTS["api"])
+        wait_for(f"http://127.0.0.1:{PORTS['api']}/?q=x")
+        stack.panel(PORTS["boot"])
+        if not wait_for(f"http://127.0.0.1:{PORTS['boot']}/healthz"):
+            print("  le panel n'a pas démarré"); return False
+        return run(["node", str(TESTS / "browser" / "boot.test.js")],
+                   {"PANEL_URL": f"http://127.0.0.1:{PORTS['boot']}"})
+    finally:
+        stack.stop()
+
+
 def browser_smart_loading_degraded():
     stack = Stack()
     try:
@@ -260,6 +275,7 @@ BROWSER = [
     ("Chargement intelligent (épisode prioritaire)", browser_smart_loading),
     ("Chargement intelligent : dégradation sans patch", browser_smart_loading_degraded),
     ("Cache persistant des épisodes", browser_episode_cache),
+    ("Démarrage des modules et filet d'erreur", browser_boot),
 ]
 
 

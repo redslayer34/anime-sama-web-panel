@@ -1,6 +1,6 @@
 /* Anime-Sama Panel — Lecteur : HLS, MP4 ou iframe, bascule vers le relais, contrôles, progression. */
 import {
-  $, clamp, clear, DEFAULT_SETTINGS, el, formatTime, relayUrl, safeUrl, SAVE_EVERY
+  $, clamp, clear, DEFAULT_SETTINGS, el, formatTime, must, relayUrl, safeUrl, SAVE_EVERY
 } from "./core.js";
 import { persist, progressKey, state } from "./store.js";
 import { notify } from "./ui.js";
@@ -11,25 +11,25 @@ import {
   seasonKey
 } from "./episodes.js";
 
-export const video          = $("#video");
-const frame          = $("#frame");
-const playerStage    = $("#playerStage");
-const placeholder    = $("#playerPlaceholder");
-const stageLoader    = $("#stageLoader");
-const formatBadge    = $("#formatBadge");
-const nowTitle       = $(".now-title");
-const nowMeta        = $("#nowMeta");
-const playerNote     = $("#playerNote");
-export const seasonSelect   = $("#seasonSelect");
-export const versionSelect  = $("#versionSelect");
-export const modeSelect     = $("#modeSelect");
-export const sourceSelect   = $("#sourceSelect");
-const sourceField    = $("#sourceField");
-export const episodeList    = $("#episodeList");
-export const episodeCount   = $("#episodeCount");
-export const resumeBanner   = $("#resumeBanner");
-const resumeText     = $("#resumeText");
-const favCurrentBtn  = $("#favCurrentBtn");
+export const video          = must("#video");
+const frame          = must("#frame");
+const playerStage    = must("#playerStage");
+const placeholder    = must("#playerPlaceholder");
+const stageLoader    = must("#stageLoader");
+const formatBadge    = must("#formatBadge");
+const nowTitle       = must(".now-title");
+const nowMeta        = must("#nowMeta");
+const playerNote     = must("#playerNote");
+export const seasonSelect   = must("#seasonSelect");
+export const versionSelect  = must("#versionSelect");
+export const modeSelect     = must("#modeSelect");
+export const sourceSelect   = must("#sourceSelect");
+const sourceField    = must("#sourceField");
+export const episodeList    = must("#episodeList");
+export const episodeCount   = must("#episodeCount");
+export const resumeBanner   = must("#resumeBanner");
+const resumeText     = must("#resumeText");
+const favCurrentBtn  = must("#favCurrentBtn");
 
 export const player = {
   token: 0,
@@ -369,43 +369,43 @@ export function wire() {
     if (url) mountSource(url);
   });
 
-  $("#prevBtn").addEventListener("click", () => step(-1));
+  must("#prevBtn").addEventListener("click", () => step(-1));
 
-  $("#nextBtn").addEventListener("click", () => step(1));
+  must("#nextBtn").addEventListener("click", () => step(1));
 
-  $("#reloadBtn").addEventListener("click", () => {
+  must("#reloadBtn").addEventListener("click", () => {
     if (!player.current) { notify("Aucune source chargée.", { type: "warn", timeout: 3000 }); return; }
     mountSource(player.current, { seek: player.kind !== "iframe" ? video.currentTime : null });
   });
 
-  $("#reloadEpisodesBtn").addEventListener("click", () => loadEpisodes({ force: true }));
+  must("#reloadEpisodesBtn").addEventListener("click", () => loadEpisodes({ force: true }));
 
-  $("#fullscreenBtn").addEventListener("click", () => {
+  must("#fullscreenBtn").addEventListener("click", () => {
     if (document.fullscreenElement) { document.exitFullscreen(); return; }
     (playerStage.requestFullscreen?.() ?? Promise.reject()).catch(() => {
       notify("Le plein écran a été refusé par le navigateur.", { type: "warn", timeout: 3500 });
     });
   });
 
-  $("#openSourceBtn").addEventListener("click", () => {
+  must("#openSourceBtn").addEventListener("click", () => {
     const url = safeUrl(player.current);   // l'originale, pas celle du relais
     if (!url) { notify("Aucune source chargée.", { type: "warn", timeout: 3000 }); return; }
     window.open(url, "_blank", "noopener,noreferrer");
   });
 
-  $("#autoplayToggle").addEventListener("change", (event) => {
+  must("#autoplayToggle").addEventListener("change", (event) => {
     state.settings.autoplay = event.target.checked;
     $("#autoplaySetting").checked = event.target.checked;
     persist();
   });
 
-  $("#resumeSeekBtn").addEventListener("click", () => {
+  must("#resumeSeekBtn").addEventListener("click", () => {
     const episode = Number(resumeBanner.dataset.episode);
     const seek = Number(resumeBanner.dataset.seek);
     if (Number.isFinite(episode)) playEpisode(episode, { seek: Number.isFinite(seek) ? seek : null });
   });
 
-  $("#resumeDismissBtn").addEventListener("click", () => { resumeBanner.hidden = true; });
+  must("#resumeDismissBtn").addEventListener("click", () => { resumeBanner.hidden = true; });
 
   favCurrentBtn.addEventListener("click", () => { if (player.anime) toggleFavorite(player.anime); });
 }

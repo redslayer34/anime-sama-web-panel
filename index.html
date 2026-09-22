@@ -19,6 +19,33 @@
 <link rel="stylesheet" href="styles/components.css">
 <link rel="stylesheet" href="styles/views.css">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
+<!-- Filet de démarrage, volontairement en script classique : il doit tourner
+     même quand les modules ne se chargent pas (ouverture en file://, fichier
+     manquant après un déploiement) ou que le démarrage lève une erreur. Sans
+     lui, la page resterait inerte et muette ; avec lui, elle dit pourquoi. -->
+<script>
+(() => {
+  let failure = "";
+  addEventListener("error", (event) => {
+    if (failure) return;
+    const target = event.target;
+    if (event.message) failure = event.message;
+    else if (target && (target.type === "module" || target.rel === "modulepreload"))
+      failure = "fichier introuvable : " + (target.getAttribute("src") || target.getAttribute("href"));
+  }, true);
+  addEventListener("load", () => {
+    if (document.documentElement.dataset.boot === "ok") return;
+    const box = document.getElementById("bootError");
+    if (!box) return;
+    box.textContent = location.protocol === "file:"
+      ? "Le panel ne s'ouvre pas par un double-clic sur index.html : le navigateur bloque ses modules en file://. Lance-le avec lancer.py (ou python serve.py)."
+      : "Le panel n'a pas pu démarrer" +
+        (failure ? " (" + failure.replace(/^Uncaught (\w*Error: )?/, "") + ")." : ".") +
+        " Recharge la page ; si le problème persiste, la console du navigateur donne le détail.";
+    box.hidden = false;
+  });
+})();
+</script>
 <script type="module" src="js/main.js"></script>
 <!-- Tous les modules demandés d'emblée, en parallèle : sans cela, le navigateur
      ne les découvre qu'en lisant les imports, niveau par niveau. -->
@@ -38,6 +65,7 @@
 <link rel="modulepreload" href="js/keyboard.js">
 </head>
 <body>
+<div class="boot-error" id="bootError" role="alert" hidden></div>
 
 <!-- Sprite d'icônes : un seul téléchargement, réutilisé via <use href="#i-…"> -->
 <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">

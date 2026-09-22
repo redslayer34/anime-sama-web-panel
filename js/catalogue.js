@@ -1,5 +1,5 @@
 /* Anime-Sama Panel — Catalogue complet : cache navigateur, préchargement, indexation. */
-import { $, CATALOGUE_KEY, CATALOGUE_MAX, CATALOGUE_TTL, el, panelServer } from "./core.js";
+import { CATALOGUE_KEY, CATALOGUE_MAX, CATALOGUE_TTL, el, must, panelServer } from "./core.js";
 import { safeStorage, state } from "./store.js";
 import { navigate, notify, openModal } from "./ui.js";
 import { ApiError, describeError, request, source } from "./api.js";
@@ -123,8 +123,8 @@ async function refreshCatalogueQuietly() {
    réindexe alors en tâche de fond. Sans ce retour visuel, la première visite
    après un réveil ressemble à une panne. La route /panel/state n'existe que
    si le panel est servi par serve.py ; ailleurs, on s'efface silencieusement. */
-const indexBanner = $("#indexBanner");
-const indexText = $("#indexText");
+const indexBanner = must("#indexBanner");
+const indexText = must("#indexText");
 export const indexing = { timer: 0, seen: false, available: true };
 
 async function fetchPanelState() {
@@ -177,7 +177,7 @@ export function wire() {
   // jusqu'à 3 Mo, resterait sinon orpheline pour toujours.
   safeStorage.remove("animeSamaPanel.catalogue.v1");
 
-  $("#loadCatalogueBtn").addEventListener("click", () => {
+  must("#loadCatalogueBtn").addEventListener("click", () => {
     const cache = readCatalogueCache();
     if (!cache) { fetchCatalogue(); return; }
     // Le catalogue étant préchargé en tâche de fond, demander « cache ou

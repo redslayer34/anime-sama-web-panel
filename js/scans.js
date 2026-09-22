@@ -1,14 +1,14 @@
 /* Anime-Sama Panel — Lecteur de scans. */
-import { $, clear, debounce, el, icon, safeUrl } from "./core.js";
+import { $, clear, debounce, el, icon, must, safeUrl } from "./core.js";
 import { state } from "./store.js";
 import { notify } from "./ui.js";
 import { describeError, source } from "./api.js";
 import { emptyState } from "./discover.js";
 
-const chapterList   = $("#chapterList");
-const chapterCount  = $("#chapterCount");
-const scanReader    = $("#scanReader");
-const chapterFilter = $("#chapterFilter");
+const chapterList   = must("#chapterList");
+const chapterCount  = must("#chapterCount");
+const scanReader    = must("#scanReader");
+const chapterFilter = must("#chapterFilter");
 
 const scans = { name: "", chapters: [], current: null };
 
@@ -95,7 +95,7 @@ async function loadChapter(number) {
 
 /** Écouteurs du module, branchés par main.js une fois tous les modules évalués. */
 export function wire() {
-  $("#scanForm").addEventListener("submit", async (event) => {
+  must("#scanForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const name = $("#scanInput").value.trim();
     if (name.length < 2) { notify("Saisis le nom du manga.", { type: "warn", timeout: 3000 }); return; }

@@ -1,5 +1,5 @@
 /* Anime-Sama Panel — Accueil : héros et rangées, affichés tant qu'aucune recherche n'est lancée. */
-import { $, clear, el, icon } from "./core.js";
+import { clear, el, icon, must } from "./core.js";
 import { coverFor, posterBox, titleHue } from "./covers.js";
 import { state } from "./store.js";
 import { animeCard, discover, isFavorite, showAnimeDetails } from "./discover.js";
@@ -14,16 +14,16 @@ import { openAnime } from "./episodes.js";
    matière possible. Il est remplacé par ce que l'utilisateur a déjà :
    ce qu'il regarde, sa liste, et de quoi explorer.
    ───────────────────────────────────────────── */
-const homeBlock   = $("#homeBlock");
-const hero        = $("#hero");
-const heroBg      = $("#heroBg");
-const heroPoster  = $("#heroPoster");
-const heroEyebrow = $("#heroEyebrow");
-const heroTitle   = $("#heroTitle");
-const heroSub     = $("#heroSub");
-const heroMeta    = $("#heroMeta");
-const heroActions = $("#heroActions");
-const homeRails   = $("#homeRails");
+const homeBlock   = must("#homeBlock");
+const hero        = must("#hero");
+const heroBg      = must("#heroBg");
+const heroPoster  = must("#heroPoster");
+const heroEyebrow = must("#heroEyebrow");
+const heroTitle   = must("#heroTitle");
+const heroSub     = must("#heroSub");
+const heroMeta    = must("#heroMeta");
+const heroActions = must("#heroActions");
+const homeRails   = must("#homeRails");
 
 /** Reprises les plus récentes, transformées en fiches présentables. */
 function continueEntries(limit = 12) {

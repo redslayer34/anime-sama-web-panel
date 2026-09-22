@@ -1,5 +1,5 @@
 /* Anime-Sama Panel — Vue Découvrir : recherche, grille d'affiches, favoris, fiche détail. */
-import { $, $$, clamp, clear, deaccent, debounce, el, icon, safeUrl } from "./core.js";
+import { $, $$, clamp, clear, deaccent, debounce, el, icon, must, safeUrl } from "./core.js";
 import { coverFor, posterBox, rememberCover } from "./covers.js";
 import { persist, state } from "./store.js";
 import { closeModal, navigate, notify, openModal } from "./ui.js";
@@ -11,12 +11,12 @@ import { updatePlayerFavButton } from "./player.js";
 import { renderFavorites } from "./library.js";
 import { setApiStatus } from "./settings.js";
 
-const discoverResults = $("#discoverResults");
-const filterInput     = $("#filterInput");
-const sortSelect      = $("#sortSelect");
-const favOnlyToggle   = $("#favOnlyToggle");
-const resultCount     = $("#resultCount");
-const searchInput     = $("#searchInput");
+const discoverResults = must("#discoverResults");
+const filterInput     = must("#filterInput");
+const sortSelect      = must("#sortSelect");
+const favOnlyToggle   = must("#favOnlyToggle");
+const resultCount     = must("#resultCount");
+const searchInput     = must("#searchInput");
 
 export const discover = { items: [], origin: "idle", limit: 60, message: "" };
 
@@ -346,12 +346,12 @@ export async function showAnimeDetails(anime) {
 
 /** Écouteurs du module, branchés par main.js une fois tous les modules évalués. */
 export function wire() {
-  $("#searchForm").addEventListener("submit", (event) => {
+  must("#searchForm").addEventListener("submit", (event) => {
     event.preventDefault();
     runSearch(searchInput.value);
   });
 
-  $("#quickSearchForm").addEventListener("submit", (event) => {
+  must("#quickSearchForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const value = $("#quickSearchInput").value;
     searchInput.value = value;

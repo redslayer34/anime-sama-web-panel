@@ -1,5 +1,5 @@
 /* Anime-Sama Panel — Favoris, reprise et historique. */
-import { $, clamp, clear, el, formatTime, HISTORY_MAX, icon, relTime } from "./core.js";
+import { $, clamp, clear, el, formatTime, HISTORY_MAX, icon, must, relTime } from "./core.js";
 import { posterBox } from "./covers.js";
 import { cryptoId, persist, state } from "./store.js";
 import { confirmDialog, navigate, notify } from "./ui.js";
@@ -8,10 +8,10 @@ import { animeFromFavorite, animeFromProgress } from "./home.js";
 import { openAnime } from "./episodes.js";
 import { player } from "./player.js";
 
-const favoritesGrid = $("#favoritesGrid");
-const historyList   = $("#historyList");
-const continueGrid  = $("#continueGrid");
-const continueTitle = $("#continueTitle");
+const favoritesGrid = must("#favoritesGrid");
+const historyList   = must("#historyList");
+const continueGrid  = must("#continueGrid");
+const continueTitle = must("#continueTitle");
 
 export function recordHistory(episodeNumber) {
   if (!player.anime || !player.season) return;
@@ -153,9 +153,9 @@ export function renderHistory() {
 
 /** Écouteurs du module, branchés par main.js une fois tous les modules évalués. */
 export function wire() {
-  $("#favSort").addEventListener("change", renderFavorites);
+  must("#favSort").addEventListener("change", renderFavorites);
 
-  $("#clearHistoryBtn").addEventListener("click", async () => {
+  must("#clearHistoryBtn").addEventListener("click", async () => {
     const ok = await confirmDialog({
       title: "Effacer l'historique ?",
       message: "L'historique et toutes les positions de lecture enregistrées seront supprimés. Les favoris et les réglages sont conservés.",

@@ -43,6 +43,14 @@ export const DEFAULT_SETTINGS = {
 export const $  = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+/** Comme $(), pour un élément dont le panel ne peut pas se passer : s'il
+    manque, l'erreur le nomme, au lieu d'un « null » anonyme plus loin. */
+export function must(sel, root = document) {
+  const node = root.querySelector(sel);
+  if (!node) throw new Error(`Élément introuvable : ${sel}`);
+  return node;
+}
+
 /** Construit un élément. `text` passe par textContent : aucune injection HTML possible. */
 export function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);

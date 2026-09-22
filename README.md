@@ -81,7 +81,7 @@ vide — accepte, et laisse l'onglet ouvert.
 |---|---|---|
 | `python3 serve.py` | *(vide)* | **Recommandé.** Rien à configurer. |
 | `python3 -m http.server 8080` | `http://127.0.0.1:5000` | Le backend doit autoriser le CORS (ci-dessous). |
-| Double-clic sur `index.html` | — | `file://` : le navigateur bloque les requêtes. À éviter. |
+| Double-clic sur `index.html` | — | Impossible : en `file://`, le navigateur refuse de charger les modules. Un bandeau l'explique. |
 
 Pour la méthode manuelle, autorise le CORS côté backend :
 
@@ -283,6 +283,8 @@ js/             La logique, en modules ES natifs chargés tels quels (aucun buil
                   library.js, scans.js, settings.js, keyboard.js
                 Règle : au niveau haut d'un module, uniquement des déclarations ; les
                 écouteurs vont dans sa fonction wire(), appelée par main.js.
+                Un module absent ou un élément attendu disparu de index.html (must())
+                s'affiche dans un bandeau qui le nomme, au lieu d'une page inerte.
 serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api,
                 gère le mot de passe et l'indexation de fond
 Dockerfile      Image « panel + backend » pour l'hébergement

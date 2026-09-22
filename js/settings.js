@@ -1,6 +1,7 @@
 /* Anime-Sama Panel — Réglages, apparence, diagnostic de l'API, export et import. */
 import {
-  $, $$, CATALOGUE_KEY, clamp, clear, DEFAULT_SETTINGS, el, HISTORY_MAX, STORE_KEY, toArray
+  $, $$, CATALOGUE_KEY, clamp, clear, DEFAULT_SETTINGS, el, HISTORY_MAX, must, STORE_KEY,
+  toArray
 } from "./core.js";
 import { persist, safeStorage, state } from "./store.js";
 import { confirmDialog, navigate, notify } from "./ui.js";
@@ -11,9 +12,9 @@ import { RESOLVED_KEY } from "./episodes.js";
 import { mountSource, player, video } from "./player.js";
 import { renderContinue, renderFavorites, renderHistory } from "./library.js";
 
-const apiStatusDot   = $("#apiStatusDot");
-const apiStatusLabel = $("#apiStatusLabel");
-const apiDiag        = $("#apiDiag");
+const apiStatusDot   = must("#apiStatusDot");
+const apiStatusLabel = must("#apiStatusLabel");
+const apiDiag        = must("#apiDiag");
 
 const STATUS_LABELS = {
   online: "API OK", offline: "API KO", demo: "Démo",
@@ -73,7 +74,7 @@ function renderStats() {
 }
 
 function bindSetting(selector, event, handler) {
-  $(selector).addEventListener(event, (e) => { handler(e.target); persist(); });
+  must(selector).addEventListener(event, (e) => { handler(e.target); persist(); });
 }
 
 /* ── Diagnostic de connexion ── */
@@ -175,7 +176,7 @@ export function wire() {
     if (!input.checked) checkApi({ silent: true });
   });
 
-  $("#themeBtn").addEventListener("click", () => {
+  must("#themeBtn").addEventListener("click", () => {
     const order = ["dark", "abyss", "light"];
     state.settings.theme = order[(order.indexOf(state.settings.theme) + 1) % order.length];
     applyAppearance();
@@ -184,7 +185,7 @@ export function wire() {
     notify(`Thème : ${{ dark: "Sombre", abyss: "Abysse", light: "Clair" }[state.settings.theme]}`, { type: "info", timeout: 2200 });
   });
 
-  $("#accentRow").addEventListener("click", (event) => {
+  must("#accentRow").addEventListener("click", (event) => {
     const button = event.target.closest(".accent");
     if (!button) return;
     state.settings.accent = button.dataset.accent;
@@ -192,11 +193,11 @@ export function wire() {
     persist();
   });
 
-  $("#apiStatusBtn").addEventListener("click", () => { navigate("settings"); checkApi(); });
+  must("#apiStatusBtn").addEventListener("click", () => { navigate("settings"); checkApi(); });
 
-  $("#testApiBtn").addEventListener("click", () => checkApi());
+  must("#testApiBtn").addEventListener("click", () => checkApi());
 
-  $("#resolveDomainBtn").addEventListener("click", async () => {
+  must("#resolveDomainBtn").addEventListener("click", async () => {
     apiDiag.hidden = false;
     apiDiag.textContent = "Interrogation de /api/getAnimeSamaURL…";
     try {
@@ -209,7 +210,7 @@ export function wire() {
   });
 
   /* ── Export / import / réinitialisation ── */
-  $("#exportBtn").addEventListener("click", () => {
+  must("#exportBtn").addEventListener("click", () => {
     const payload = {
       format: "anime-sama-panel", version: 1, exportedAt: new Date().toISOString(),
       settings: state.settings, favorites: state.favorites, history: state.history, progress: state.progress,
@@ -224,9 +225,9 @@ export function wire() {
     notify("Données exportées.", { type: "success", timeout: 3200 });
   });
 
-  $("#importBtn").addEventListener("click", () => $("#importInput").click());
+  must("#importBtn").addEventListener("click", () => $("#importInput").click());
 
-  $("#importInput").addEventListener("change", async (event) => {
+  must("#importInput").addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -253,7 +254,7 @@ export function wire() {
     }
   });
 
-  $("#resetBtn").addEventListener("click", async () => {
+  must("#resetBtn").addEventListener("click", async () => {
     const ok = await confirmDialog({
       title: "Tout réinitialiser ?",
       message: "Favoris, historique, progression, réglages et catalogue en cache seront supprimés définitivement de ce navigateur.",

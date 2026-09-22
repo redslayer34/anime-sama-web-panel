@@ -112,3 +112,6 @@ wireSettings();
 wireKeyboard();
 
 init();
+// Lu par le filet de démarrage d'index.html : sans cette marque, il affiche
+// l'erreur qui a interrompu le chargement.
+document.documentElement.dataset.boot = "ok";
