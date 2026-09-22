@@ -116,6 +116,10 @@ def unit_playable():
     return run([sys.executable, str(TESTS / "unit" / "test_playable_check.py")])
 
 
+def unit_config():
+    return run([sys.executable, str(TESTS / "unit" / "test_config_consistency.py")])
+
+
 def browser_panel():
     stack = Stack()
     try:
@@ -245,6 +249,7 @@ UNIT = [
     ("Relais de flux (filtre, playlists, Range)", unit_stream),
     ("Équivalence de la résolution parallèle", unit_equivalence),
     ("Vérification de lecture : réécriture équivalente", unit_playable),
+    ("Cohérence du réglage des threads", unit_config),
 ]
 BROWSER = [
     ("Panel complet", browser_panel),

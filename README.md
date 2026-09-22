@@ -132,7 +132,7 @@ ci-dessous) — inutile de chercher ailleurs.
 | `PANEL_PASSWORD` | Mot de passe d'accès. Vide = site ouvert à tous. |
 | `PANEL_USER` | Identifiant, `panel` par défaut. |
 | `PANEL_AUTO_INDEX` | `1` pour indexer au démarrage si le catalogue est vide. |
-| `PANEL_RESOLVER_WORKERS` | Résolutions d'épisodes simultanées (6 par défaut). |
+| `PANEL_RESOLVER_WORKERS` | Résolutions d'épisodes simultanées (8 par défaut). |
 | `PORT` | Fourni par l'hébergeur ; le panel s'y adapte seul. |
 
 ### Vitesse de chargement des épisodes
@@ -144,7 +144,7 @@ mesures s'y attaquent :
 
 - **Résolution parallèle.** L'image applique un patch à AnimeSamaApi qui traite les
   épisodes dans un pool de threads, avec une session HTTP par thread. Comptez un gain d'un
-  facteur 5 à 6. Réglable par `PANEL_RESOLVER_WORKERS` (6 par défaut) ; monter plus haut
+  facteur 5 à 6. Réglable par `PANEL_RESOLVER_WORKERS` (8 par défaut) ; monter plus haut
   expose à un blocage par les hébergeurs vidéo.
 - **Aucune requête suspendue.** Le serveur répond immédiatement `202` et travaille en
   tâche de fond ; le panel suit l'avancement et affiche le temps écoulé. Ni le navigateur

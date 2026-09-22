@@ -54,8 +54,9 @@ RUN python /app/bake_index.py || echo "Indexation non effectuée au build ; elle
 COPY index.html script.js serve.py /app/
 COPY styles/ /app/styles/
 
+# PANEL_RESOLVER_WORKERS n'est volontairement pas fixé ici : son défaut vit
+# dans speedup_patch.py (WORKERS_DEFAULT), et une valeur posée ici le masquerait.
 ENV PANEL_AUTO_INDEX=1 \
-    PANEL_RESOLVER_WORKERS=6 \
     PORT=8080
 EXPOSE 8080
 

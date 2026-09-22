@@ -24,6 +24,8 @@ les arrête. **Aucun test ne contacte Anime-Sama** : tout est simulé en local.
 |---|---|
 | `unit/test_stream.py` | Filtre anti-rebond du relais, réécriture des playlists HLS, requêtes `Range`. |
 | `unit/test_parallel_equivalence.py` | La résolution parallèle des épisodes, *et* le chemin « épisode prioritaire », rendent exactement le même résultat que la boucle séquentielle d'origine. |
+| `unit/test_playable_check.py` | La vérification « ce flux répond-il ? » réécrite (Referer d'abord, réponses refermées) rend le même booléen que l'originale dans tous les cas. |
+| `unit/test_config_consistency.py` | `Dockerfile`, `render.yaml` et README n'écrasent ni ne contredisent le nombre de threads par défaut (`WORKERS_DEFAULT`). |
 | `browser/panel.test.js` | Parcours complet : recherche, catalogue, favoris, lecteur, saisons, historique, modales, scans, thèmes, mode démo, persistance, raccourcis, rendu mobile. |
 | `browser/auth.test.js` | Mot de passe : 401 sur `/`, `/api` et `/panel/state`, `/healthz` laissé ouvert, lecture normale une fois authentifié. |
 | `browser/jobs.test.js` | Tâches de fond : réponse immédiate, suivi de progression, cache partagé, backend sollicité une seule fois. |
@@ -31,6 +33,7 @@ les arrête. **Aucun test ne contacte Anime-Sama** : tout est simulé en local.
 | `browser/relay.test.js` | Bascule vers le relais vidéo et respect des trois réglages. |
 | `browser/smart-loading.test.js` | Chargement intelligent : boutons numérotés avant résolution complète, épisode ciblé jouable en quelques secondes, clic sur un épisode non résolu, fusion en arrière-plan du reste de la saison. |
 | `browser/smart-loading-degraded.test.js` | Dégradation propre face à un backend qui ignore `&e=` (non patché) : tout s'affiche comme avant, sans bouton « non résolu » ni erreur. |
+| `browser/episode-cache.test.js` | Cache navigateur des épisodes résolus : série rouverte et lecture sans aucune requête de résolution, rechargement manuel qui repasse par le réseau. |
 
 ## Détails utiles
 

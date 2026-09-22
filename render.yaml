@@ -18,7 +18,9 @@ services:
       # chaque redémarrage sur l'offre gratuite).
       - key: PANEL_AUTO_INDEX
         value: "1"
-      # Résolutions d'épisodes simultanées. Au-delà d'une poignée, les
+      # Résolutions d'épisodes simultanées. Au-delà d'une douzaine, les
       # hébergeurs vidéo limitent les requêtes venant d'une même adresse.
+      # Doit rester égal à WORKERS_DEFAULT (docker/speedup_patch.py) :
+      # tests/unit/test_config_consistency.py le vérifie.
       - key: PANEL_RESOLVER_WORKERS
-        value: "6"
+        value: "8"
