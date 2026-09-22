@@ -1,7 +1,7 @@
 /* ════════════════════════════════════════════════════════════════════
    COMPOSANTS — briques réutilisables, indépendantes de toute vue.
 
-   Plusieurs classes ici sont une API : `script.js` les pose, et les
+   Plusieurs classes ici sont une API : les modules de `js/` les posent, et les
    suites de tests les comptent. Ne pas renommer, ne pas réutiliser à des
    fins décoratives : .card .row .episode .chapter .toast .empty
    .scan-page .scan-toolbar .card-fav .btn-primary

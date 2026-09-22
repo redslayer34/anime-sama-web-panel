@@ -25,7 +25,7 @@ les arrête. **Aucun test ne contacte Anime-Sama** : tout est simulé en local.
 | `unit/test_stream.py` | Filtre anti-rebond du relais, réécriture des playlists HLS, requêtes `Range`. |
 | `unit/test_parallel_equivalence.py` | La résolution parallèle des épisodes, *et* le chemin « épisode prioritaire », rendent exactement le même résultat que la boucle séquentielle d'origine. |
 | `unit/test_playable_check.py` | La vérification « ce flux répond-il ? » réécrite (Referer d'abord, réponses refermées) rend le même booléen que l'originale dans tous les cas. |
-| `unit/test_config_consistency.py` | `Dockerfile`, `render.yaml` et README n'écrasent ni ne contredisent le nombre de threads par défaut (`WORKERS_DEFAULT`). |
+| `unit/test_config_consistency.py` | `Dockerfile`, `render.yaml` et README n'écrasent ni ne contredisent le nombre de threads par défaut (`WORKERS_DEFAULT`) ; chaque module de `js/` est préchargé par `index.html` et copié dans l'image. |
 | `browser/panel.test.js` | Parcours complet : recherche, catalogue, favoris, lecteur, saisons, historique, modales, scans, thèmes, mode démo, persistance, raccourcis, rendu mobile. |
 | `browser/auth.test.js` | Mot de passe : 401 sur `/`, `/api` et `/panel/state`, `/healthz` laissé ouvert, lecture normale une fois authentifié. |
 | `browser/jobs.test.js` | Tâches de fond : réponse immédiate, suivi de progression, cache partagé, backend sollicité une seule fois. |

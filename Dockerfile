@@ -51,8 +51,9 @@ RUN cd /app/AnimeSamaApi && python /app/check_deps.py
 # n'interrompt pas le build : le serveur réindexe alors au démarrage.
 RUN python /app/bake_index.py || echo "Indexation non effectuée au build ; elle aura lieu au démarrage."
 
-COPY index.html script.js serve.py /app/
+COPY index.html serve.py /app/
 COPY styles/ /app/styles/
+COPY js/ /app/js/
 
 # PANEL_RESOLVER_WORKERS n'est volontairement pas fixé ici : son défaut vit
 # dans speedup_patch.py (WORKERS_DEFAULT), et une valeur posée ici le masquerait.

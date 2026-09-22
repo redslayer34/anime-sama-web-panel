@@ -271,9 +271,18 @@ styles/         Feuilles chargées dans cet ordre, chacune s'appuyant sur la pr�
                   components.css  boutons, affiches, cartes, rangées, épisodes, modale…
                   views.css       coque, navigation, accueil, lecteur, scans, réglages
                   fonts/          Inter et Sora en variable (72 Ko, aucun CDN)
-script.js       Toute la logique, en sections numérotées (utilitaires, jaquettes, stockage,
-                API, toasts/modales, navigation, accueil, découverte, lecteur, favoris,
-                scans, réglages)
+js/             La logique, en modules ES natifs chargés tels quels (aucun build) :
+                  main.js       point d'entrée, sommaire des modules, démarrage
+                  core.js       constantes et utilitaires (el, icon, $…)
+                  store.js      état persistant ; ui.js notifications, modales, navigation
+                  api.js        requêtes, tâches 202, normalisation, mode démo
+                  covers.js     jaquettes ; home.js accueil ; discover.js recherche et grille
+                  catalogue.js  catalogue complet et indexation
+                  episodes.js   chargement intelligent, cache des épisodes résolus
+                  player.js     lecture HLS/MP4/iframe, relais, contrôles
+                  library.js, scans.js, settings.js, keyboard.js
+                Règle : au niveau haut d'un module, uniquement des déclarations ; les
+                écouteurs vont dans sa fonction wire(), appelée par main.js.
 serve.py        Lanceur : détecte ou démarre le backend, sert le panel, relaie /api,
                 gère le mot de passe et l'indexation de fond
 Dockerfile      Image « panel + backend » pour l'hébergement

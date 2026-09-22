@@ -249,7 +249,7 @@ UNIT = [
     ("Relais de flux (filtre, playlists, Range)", unit_stream),
     ("Équivalence de la résolution parallèle", unit_equivalence),
     ("Vérification de lecture : réécriture équivalente", unit_playable),
-    ("Cohérence du réglage des threads", unit_config),
+    ("Cohérence de la configuration", unit_config),
 ]
 BROWSER = [
     ("Panel complet", browser_panel),

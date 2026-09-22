@@ -483,6 +483,7 @@ class PanelHandler(SimpleHTTPRequestHandler):
 
     def route(self, body):
         path = self.path.split("?")[0]
+        self.static_response = False
 
         # Exempté d'authentification : l'hébergeur doit pouvoir sonder le service
         # sans identifiants, sinon il le déclare en échec et le redéploie en boucle.
@@ -499,7 +500,17 @@ class PanelHandler(SimpleHTTPRequestHandler):
             return self.send_state(body)
         if is_api_call(self.path):
             return self.proxy(body=body)
+        # Fichiers du panel : le navigateur revalide à chaque chargement (304
+        # si rien n'a changé). Sans cela, il pourrait garder en cache une partie
+        # des modules de js/ et recharger l'autre après un déploiement : des
+        # imports qui ne se correspondent plus, et une page blanche.
+        self.static_response = True
         super().do_GET() if body else super().do_HEAD()
+
+    def end_headers(self):
+        if getattr(self, "static_response", False):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
 
     def authorized(self):
         if not password():
@@ -746,6 +757,9 @@ def main():
     # forme — un échec silencieux, et difficile à diagnostiquer à distance.
     if not (ROOT / "styles" / "tokens.css").is_file():
         sys.exit(f"le dossier styles/ est introuvable dans {ROOT}")
+    # Idem pour la logique : sans js/, la page reste inerte, sans message.
+    if not (ROOT / "js" / "main.js").is_file():
+        sys.exit(f"le dossier js/ est introuvable dans {ROOT}")
 
     say("Panel Anime-Sama")
     say("─" * 46)

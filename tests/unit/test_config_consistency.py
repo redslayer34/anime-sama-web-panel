@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Nombre de résolutions simultanées : une seule source de vérité.
+Réglages recopiés en plusieurs endroits : ils doivent rester d'accord.
+
+1. Nombre de résolutions simultanées : une seule source de vérité.
 
 `WORKERS_DEFAULT` (docker/speedup_patch.py) fixe la valeur par défaut, mais
 une variable d'environnement la surcharge. Le Dockerfile et render.yaml en
 posaient une chacun, restée à 6 quand le défaut est passé à 8 : le gain était
 mesuré, documenté, et pourtant inactif en production. Ce test fait échouer la
 campagne dès qu'un de ces fichiers diverge à nouveau.
+
+2. Modules de js/ : index.html les précharge tous (sans quoi ils se
+découvrent niveau par niveau), et l'image Docker embarque le dossier.
 """
 import ast
 import re
@@ -67,6 +72,17 @@ def main():
     check("le README documente le défaut", bool(documented))
     check("le README annonce la bonne valeur", all(d == default for d in documented),
           f"README={sorted(set(documented))}, défaut={default}")
+
+    modules = sorted(p.name for p in (ROOT / "js").glob("*.js"))
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    entry = re.findall(r'<script type="module" src="js/([\w-]+\.js)"', html)
+    preloaded = re.findall(r'<link rel="modulepreload" href="js/([\w-]+\.js)"', html)
+    check("index.html charge js/main.js en module", entry == ["main.js"], str(entry))
+    missing = sorted(set(modules) - set(preloaded) - {"main.js"})
+    check("chaque module de js/ est préchargé", not missing, ", ".join(missing))
+    stale = sorted(set(preloaded) - set(modules))
+    check("aucun préchargement vers un module disparu", not stale, ", ".join(stale))
+    check("le Dockerfile copie js/", re.search(r"^COPY js/ ", dockerfile, re.M) is not None)
 
     print(f"\n{'TOUT EST VERT' if not failures else str(failures) + ' ÉCHEC(S)'} "
           f"({checks} vérifications)")

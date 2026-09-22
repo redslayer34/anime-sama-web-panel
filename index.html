@@ -19,7 +19,23 @@
 <link rel="stylesheet" href="styles/components.css">
 <link rel="stylesheet" href="styles/views.css">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js" defer></script>
-<script src="script.js" defer></script>
+<script type="module" src="js/main.js"></script>
+<!-- Tous les modules demandés d'emblée, en parallèle : sans cela, le navigateur
+     ne les découvre qu'en lisant les imports, niveau par niveau. -->
+<link rel="modulepreload" href="js/core.js">
+<link rel="modulepreload" href="js/store.js">
+<link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/api.js">
+<link rel="modulepreload" href="js/covers.js">
+<link rel="modulepreload" href="js/discover.js">
+<link rel="modulepreload" href="js/home.js">
+<link rel="modulepreload" href="js/catalogue.js">
+<link rel="modulepreload" href="js/episodes.js">
+<link rel="modulepreload" href="js/player.js">
+<link rel="modulepreload" href="js/library.js">
+<link rel="modulepreload" href="js/scans.js">
+<link rel="modulepreload" href="js/settings.js">
+<link rel="modulepreload" href="js/keyboard.js">
 </head>
 <body>
 
