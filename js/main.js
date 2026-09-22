@@ -31,6 +31,7 @@ import { loadState, persist, state } from "./store.js";
 import { applyView, notify, wire as wireUi } from "./ui.js";
 import { apiBase, source } from "./api.js";
 import { renderDiscover, updateFavCount, wire as wireDiscover } from "./discover.js";
+import { wire as wireHome } from "./home.js";
 import { pollIndexing, warmHomeCatalogue, wire as wireCatalogue } from "./catalogue.js";
 import { renderEpisodes } from "./episodes.js";
 import { ensureOption, modeSelect, player, versionSelect, wire as wirePlayer } from "./player.js";
@@ -104,6 +105,7 @@ function init() {
 
 wireUi();
 wireDiscover();
+wireHome();
 wireCatalogue();
 wirePlayer();
 wireLibrary();

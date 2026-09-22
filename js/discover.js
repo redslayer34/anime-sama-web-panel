@@ -18,7 +18,38 @@ const favOnlyToggle   = must("#favOnlyToggle");
 const resultCount     = must("#resultCount");
 const searchInput     = must("#searchInput");
 
-export const discover = { items: [], origin: "idle", limit: 60, message: "" };
+// kind : « search » ou « catalogue » — ce que la grille montre, pour la
+// titrer et pour allumer le bon onglet. query : le terme recherché.
+export const discover = { items: [], origin: "idle", limit: 60, message: "", kind: "search", query: "" };
+
+/** Retour à l'accueil : la grille se vide, le héros et les rangées reviennent. */
+export function goHome() {
+  discover.items = [];
+  discover.origin = "idle";
+  discover.query = "";
+  searchInput.value = "";
+  filterInput.value = "";
+  renderDiscover();
+  navigate("discover");
+  window.scrollTo({ top: 0 });
+}
+
+/** Titre et sous-titre des résultats, et état exposé au CSS (onglet actif,
+    en-tête transparent sur l'accueil). */
+function renderBrowseHead(count = null) {
+  const root = document.documentElement;
+  root.dataset.browse = discover.origin === "idle" ? "idle" : discover.kind;
+  const title = must("#catalogueTitle");
+  const sub = must("#browseSub");
+  if (discover.kind === "catalogue") {
+    title.textContent = "Catalogue";
+    sub.textContent = count === null ? "Chargement…" : `${count} titre${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""}`;
+  } else {
+    title.textContent = discover.query ? `Résultats pour « ${discover.query} »` : "Recherche";
+    sub.textContent = count === null ? "Recherche en cours…" : `${count} titre${count > 1 ? "s" : ""} trouvé${count > 1 ? "s" : ""}`;
+  }
+  if (discover.origin === "error") sub.textContent = "La requête a échoué.";
+}
 
 /** Seule primitive d'état vide du panel. Elle est utilisée dans six
     conteneurs dont certains sont comptés par les tests : elle ne doit
@@ -114,49 +145,51 @@ function favButton(anime) {
 
 /** Carte d'anime, pilotée par l'affiche.
 
+    Au repos, l'affiche seule, comme sur une plateforme. Au survol (ou au
+    focus clavier), un bouton de lecture et l'étoile apparaissent ; un clic
+    ailleurs sur l'affiche ouvre la fiche.
+
     Trois règles de structure, imposées par les suites de tests et par la
     façon dont un clic automatisé vise le centre d'un élément :
       · le bouton de lecture est le PREMIER .btn-primary du sous-arbre ;
       · .card-fav est un descendant, et rien ne le recouvre — le voile
-        dégradé est en `pointer-events: none` ;
-      · les actions restent présentes et cliquables en permanence, elles
-        ne font que se renforcer au survol. */
+        dégradé est en `pointer-events: none`, la zone de clic (.card-hit)
+        passe dessous ;
+      · les boutons restent dans le flux et cliquables : seule leur
+        opacité dépend du survol, jamais leur présence. */
 export function animeCard(anime) {
   const progress = latestProgress(anime.id);
   const resume = progress
     ? { seasonSlug: progress.seasonSlug, version: progress.version, episode: progress.lastEpisode }
     : {};
-  const chips = [];
-  if (Number.isFinite(anime.score)) chips.push(el("span", { class: "chip chip-sm", text: `Score ${anime.score}` }));
-  if (progress) chips.push(el("span", { class: "chip chip-sm chip-accent", text: `${progress.seasonLabel} · É${progress.lastEpisode}` }));
-
   const ratio = progress ? watchedRatio(progress) : 0;
+  const details = () => showAnimeDetails(anime);
+
   const poster = posterBox(anime, {
     extra: [
+      el("button", { type: "button", class: "card-hit", tabindex: "-1", "aria-hidden": "true", onclick: details }),
       el("div", { class: "poster-scrim", "aria-hidden": "true" }),
-      el("div", { class: "poster-actions" }, [
-        el("button", {
-          type: "button", class: "btn btn-primary btn-sm btn-icon",
-          title: progress ? "Reprendre" : "Ouvrir",
-          "aria-label": `${progress ? "Reprendre" : "Ouvrir"} ${anime.title}`,
-          onclick: () => openAnime(anime, resume),
-        }, icon("play")),
-        el("button", {
-          type: "button", class: "icon-btn icon-btn-sm card-info",
-          title: "Fiche détaillée", "aria-label": `Fiche de ${anime.title}`,
-          onclick: () => showAnimeDetails(anime),
-        }, icon("info")),
-      ]),
+      el("button", {
+        type: "button", class: "btn btn-primary play-fab",
+        title: progress ? "Reprendre" : "Regarder",
+        "aria-label": `${progress ? "Reprendre" : "Regarder"} ${anime.title}`,
+        onclick: () => openAnime(anime, resume),
+      }, icon("play")),
       favButton(anime),
+      progress ? el("span", { class: "poster-tag", text: `É${progress.lastEpisode}` }) : null,
       ratio > 0 ? el("div", { class: "poster-bar" }, el("i", { style: { width: `${ratio * 100}%` } })) : null,
     ],
   });
 
+  const sub = progress
+    ? el("p", { class: "card-sub card-sub-accent", text: `${progress.seasonLabel} · Épisode ${progress.lastEpisode}` })
+    : (anime.alt ? el("p", { class: "card-sub", text: anime.alt }) : null);
+
   return el("article", { class: "card", dataset: { id: anime.id } }, [
     poster,
-    el("h3", { class: "card-title", text: anime.title }),
-    anime.alt ? el("p", { class: "card-sub", text: anime.alt }) : null,
-    chips.length ? el("div", { class: "card-meta" }, chips) : null,
+    el("h3", { class: "card-title" },
+      el("button", { type: "button", class: "card-link", onclick: details }, anime.title)),
+    sub,
   ]);
 }
 
@@ -187,6 +220,7 @@ export function renderDiscover() {
   clear(discoverResults);
   // L'accueil n'occupe l'écran que tant que la grille n'a rien à montrer.
   renderHome();
+  renderBrowseHead();
 
   if (discover.origin === "loading") {
     resultCount.textContent = "…";
@@ -207,18 +241,22 @@ export function renderDiscover() {
 
   if (discover.origin === "idle") {
     resultCount.textContent = "—";
+    // Tant que l'accueil a quelque chose à montrer, il suffit ; l'invitation
+    // ne sert qu'au tout premier lancement, quand il n'y a encore rien.
+    if (!must("#homeBlock").hidden) return;
     discoverResults.append(emptyState({
       glyph: "compass",
       size: "compact",
       title: "Parcourir le catalogue",
       text: "Saisis un titre pour interroger l'API, ou charge le catalogue complet pour filtrer les 4000+ fiches hors ligne.",
-      action: { label: "Charger le catalogue", onClick: () => loadCatalogueBtn.click() },
+      action: { label: "Charger le catalogue", onClick: () => must("#loadCatalogueBtn").click() },
     }));
     return;
   }
 
   const items = filteredDiscover();
   resultCount.textContent = `${items.length} titre${items.length > 1 ? "s" : ""}`;
+  renderBrowseHead(discover.items.length);
 
   if (!items.length) {
     discoverResults.append(emptyState({
@@ -250,15 +288,17 @@ export function renderDiscover() {
 async function runSearch(query) {
   const term = query.trim();
   searchInput.value = term;
-  $("#quickSearchInput").value = term;
   if (term.length < 2) {
     notify("Saisis au moins 2 caractères.", { type: "warn", timeout: 3200 });
     return;
   }
   discover.origin = "loading";
+  discover.kind = "search";
+  discover.query = term;
   discover.limit = 60;
   renderDiscover();
   navigate("discover");
+  searchInput.blur();
   try {
     const items = await source.search(term, Number($("#searchLimit").value) || 10);
     discover.items = items.map((a, i) => ({ ...a, index: i }));
@@ -351,11 +391,11 @@ export function wire() {
     runSearch(searchInput.value);
   });
 
-  must("#quickSearchForm").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const value = $("#quickSearchInput").value;
-    searchInput.value = value;
-    runSearch(value);
+  must("#browseHomeBtn").addEventListener("click", goHome);
+
+  // Échap vide la recherche en cours de saisie, comme sur les plateformes.
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { searchInput.value = ""; searchInput.blur(); }
   });
 
   filterInput.addEventListener("input", debounce(() => { discover.limit = 60; renderDiscover(); }, 140));

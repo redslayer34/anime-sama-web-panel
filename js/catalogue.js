@@ -26,6 +26,7 @@ function readCatalogueCache() {
 
 async function fetchCatalogue() {
   discover.origin = "loading";
+  discover.kind = "catalogue";
   renderDiscover();
   navigate("discover");
   try {
@@ -77,6 +78,7 @@ export async function warmHomeCatalogue() {
 function showCatalogue(items) {
   discover.items = items.map((a, i) => ({ ...a, index: i }));
   discover.origin = "results";
+  discover.kind = "catalogue";
   discover.limit = 60;
   renderDiscover();
 }

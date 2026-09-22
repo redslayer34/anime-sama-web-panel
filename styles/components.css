@@ -66,6 +66,23 @@
 .btn-sm { height: var(--ctl-h-sm); padding: 0 var(--sp-3); font-size: var(--fs-sm) }
 .btn-sm svg { width: 16px; height: 16px }
 
+.btn-lg { height: 48px; padding: 0 var(--sp-6); border-radius: var(--r-md); font-size: var(--fs-base) }
+.btn-lg svg { width: 20px; height: 20px }
+.btn-lg.btn-primary svg { fill: currentColor; stroke: none }
+.btn-icon-lg { width: 48px; padding: 0 }
+
+/* Sur une image : fond translucide et flou, lisible sur n'importe quelle
+   affiche. Actif (dans Ma liste) : l'icône passe en coche. */
+.btn-glass {
+  background: rgba(255, 255, 255, .14);
+  border-color: rgba(255, 255, 255, .12);
+  color: #fff;
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+}
+.btn-glass:hover { background: rgba(255, 255, 255, .24) }
+.btn-glass.is-on { border-color: rgba(255, 255, 255, .3) }
+
 /* Bouton carré : le pictogramme seul, même hauteur que les autres. */
 .btn-icon { width: var(--ctl-h); padding: 0 }
 .btn-icon.btn-sm { width: var(--ctl-h-sm) }
@@ -307,15 +324,17 @@ fieldset.field-group > legend {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(0, 0, 0, .45) 0%, transparent 32%,
-                                      transparent 55%, rgba(0, 0, 0, .70) 100%);
-  opacity: .9;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, transparent 30%,
+                                      transparent 60%, rgba(0, 0, 0, .55) 100%);
+  opacity: 0;
   transition: opacity var(--t) var(--ease);
 }
 
+.card:hover .poster-scrim, .card:focus-within .poster-scrim { opacity: 1 }
 .poster-bar {
   position: absolute;
   left: 0; right: 0; bottom: 0;
+  z-index: 2;
   height: 3px;
   background: rgba(255, 255, 255, .22);
 }
@@ -325,34 +344,62 @@ fieldset.field-group > legend {
   background: var(--accent);
 }
 
-/* ════════ Carte ══════════════════════════════════════════════════ */
+/* ════════ Carte ══════════════════════════════════════════════════
+   Au repos, l'affiche et le titre, rien d'autre. Au survol ou au focus :
+   l'affiche s'éclaire, le bouton de lecture et l'étoile apparaissent. Sur
+   écran tactile, un toucher sur l'affiche ouvre la fiche. */
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
   min-width: 0;
   animation: fade-up var(--t-slow) var(--ease) both;
 }
-.card > .poster { transition: transform var(--t) var(--ease), box-shadow var(--t) var(--ease) }
+.card > .poster {
+  margin-bottom: var(--sp-2);
+  transition: transform var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
 .card:hover > .poster,
 .card:focus-within > .poster {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-3);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--shadow-3), 0 0 0 1px rgba(255, 255, 255, .12);
 }
-.card:hover .poster-scrim { opacity: 1 }
+.card .poster-img { transition: filter var(--t) var(--ease) }
+.card:hover .poster-img { filter: brightness(.82) }
+
+/* Zone de clic pleine affiche, sous les boutons. */
+.card-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
 
 .card-title {
   font-family: var(--font-ui);
   font-size: var(--fs-md);
   font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: 0;
+  line-height: 1.3;
   color: var(--text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.card-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.card-link:hover { color: var(--accent-text) }
 .card-sub {
   font-size: var(--fs-xs);
   color: var(--faint);
@@ -360,58 +407,87 @@ fieldset.field-group > legend {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.card-sub-accent { color: var(--accent-text); font-weight: 600 }
 .card-meta { display: flex; flex-wrap: wrap; gap: var(--sp-1) }
 
-/* Actions posées sur l'affiche. Elles restent visibles en permanence —
-   discrètes au repos, franches au survol — plutôt que d'apparaître au
-   survol : c'est meilleur au tactile, atteignable au clavier, et ça ne
-   dépend pas d'un état de pointeur pour être cliquable. */
-.poster-actions {
+/* Lecture : rond, au centre de l'affiche, révélé au survol. */
+.play-fab {
   position: absolute;
-  left: var(--sp-2);
-  right: var(--sp-2);
-  bottom: var(--sp-2);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
+  left: 50%; top: 50%;
+  z-index: 2;
+  width: 52px; height: 52px;
+  padding: 0;
+  margin: -26px 0 0 -26px;
+  border-radius: var(--r-full);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, .6);
+  opacity: 0;
+  transform: scale(.86);
+  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease), filter var(--t-fast) var(--ease);
 }
-/* Discrètes au repos, franches au survol — mais toujours présentes et
-   cliquables, jamais révélées par un état de pointeur. */
-.poster-actions .btn-primary { box-shadow: var(--shadow-2); opacity: .82 }
-.card:hover .poster-actions .btn-primary,
-.card:focus-within .poster-actions .btn-primary { opacity: 1 }
-.poster-actions .icon-btn, .card-fav { opacity: .78 }
-.card:hover .poster-actions .icon-btn,
-.card:hover .card-fav,
-.card:focus-within .poster-actions .icon-btn,
-.card:focus-within .card-fav,
-.card-fav.is-on { opacity: 1 }
-
-.card-info {
-  margin-left: auto;
-  color: #fff;
-  background: rgba(0, 0, 0, .45);
-  backdrop-filter: blur(6px);
-}
-.card-info:hover { background: rgba(0, 0, 0, .65); color: #fff }
+.play-fab svg { width: 22px; height: 22px; margin-left: 3px; fill: currentColor; stroke: none }
+.card:hover .play-fab,
+.card:focus-within .play-fab { opacity: 1; transform: scale(1) }
+.card .play-fab:active { transform: scale(.94) }
 
 .card-fav {
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
+  z-index: 2;
   color: #fff;
   background: rgba(0, 0, 0, .45);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity var(--t) var(--ease), background var(--t-fast) var(--ease);
 }
-.card-fav:hover { background: rgba(0, 0, 0, .65); color: #fff }
+.card:hover .card-fav,
+.card:focus-within .card-fav,
+.card-fav.is-on { opacity: 1 }
+.card-fav:hover { background: rgba(0, 0, 0, .7); color: #fff }
 .card-fav.is-on { color: var(--accent) }
+
+/* Épisode en cours, en pastille dans le coin. */
+.poster-tag {
+  position: absolute;
+  left: var(--sp-2);
+  bottom: calc(var(--sp-2) + 3px);
+  z-index: 2;
+  padding: 2px 7px;
+  border-radius: var(--r-xs);
+  background: rgba(0, 0, 0, .66);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+
+/* Sans pointeur précis, rien n'apparaît au survol : l'affiche ouvre la
+   fiche, qui porte les mêmes actions. */
+@media (hover: none) {
+  .play-fab { display: none }
+  .card-fav:not(.is-on) { opacity: 0; pointer-events: none }
+}
+
+/* ── Carte large « Reprendre » : vignette paysage ── */
+.poster-wide { aspect-ratio: 16 / 9 }
+.poster-wide .poster-img { object-position: center 24% }
+.poster-wide .poster-gen { align-items: flex-end }
+.wide-card .poster-scrim { background: linear-gradient(0deg, rgba(0, 0, 0, .55) 0%, transparent 55%) }
+.wide-card .play-fab { width: 48px; height: 48px; margin: -24px 0 0 -24px }
+.wide-card .poster-bar { height: 4px }
+@media (hover: none) { .wide-card .play-fab { display: inline-flex; opacity: .92; transform: none } }
 
 /* ════════ Grilles ════════════════════════════════════════════════ */
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(clamp(130px, 15vw, 172px), 1fr));
-  gap: var(--sp-5) var(--sp-4);
+  grid-template-columns: repeat(auto-fill, minmax(clamp(128px, 11.5vw, 184px), 1fr));
+  gap: var(--sp-6) var(--sp-4);
 }
+.card-grid-wide { grid-template-columns: repeat(auto-fill, minmax(clamp(240px, 24vw, 340px), 1fr)) }
 :root[data-compact="1"] .card-grid {
   grid-template-columns: repeat(auto-fill, minmax(clamp(104px, 11vw, 132px), 1fr));
   gap: var(--sp-4) var(--sp-3);
@@ -427,39 +503,48 @@ fieldset.field-group > legend {
    chaîne, la piste impose sa largeur intrinsèque et fait déborder la page
    entière — ce que vérifie une assertion en 390 px. */
 .rail { position: relative; min-width: 0 }
+/* La piste déborde jusqu'au bord droit de l'écran — la rangée continue
+   au-delà de la colonne, invitation à faire défiler — tout en gardant sa
+   première carte alignée sur le contenu. */
 .rail-track {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: clamp(126px, 15vw, 172px);
+  grid-auto-columns: clamp(132px, 14vw, 190px);
   gap: var(--sp-4);
   min-width: 0;
+  margin-inline: calc(var(--page-pad, 0px) * -1);
+  padding-inline: var(--page-pad, 0px);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
-  scroll-padding-inline: var(--sp-1);
-  padding-block: var(--sp-1) var(--sp-2);
+  scroll-padding-inline: var(--page-pad, 0px);
+  padding-block: var(--sp-2) var(--sp-3);
   scrollbar-width: none;
 }
+.rail-track-wide { grid-auto-columns: clamp(240px, 24vw, 340px) }
 .rail-track::-webkit-scrollbar { display: none }
 .rail-track > * { scroll-snap-align: start }
 
 .rail-arrow {
   position: absolute;
-  top: calc(50% - 40px);
-  z-index: var(--z-raised);
-  width: 36px; height: 56px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface-1);
+  top: var(--sp-2);
+  bottom: calc(var(--sp-3) + 52px);
+  z-index: 3;
+  width: calc(var(--page-pad, 48px) - var(--sp-2));
+  min-width: 36px;
+  max-width: 56px;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
   color: var(--text);
   opacity: 0;
   transition: opacity var(--t) var(--ease), background var(--t-fast) var(--ease);
-  box-shadow: var(--shadow-2);
 }
-.rail-arrow[data-dir="prev"] { left: calc(var(--sp-3) * -1) }
-.rail-arrow[data-dir="next"] { right: calc(var(--sp-3) * -1) }
+.rail-arrow svg { width: 26px; height: 26px; stroke-width: 2.2 }
+.rail-arrow[data-dir="prev"] { left: calc(var(--page-pad, 0px) * -1) }
+.rail-arrow[data-dir="next"] { right: calc(var(--page-pad, 0px) * -1) }
 .rail:hover .rail-arrow, .rail-arrow:focus-visible { opacity: 1 }
-.rail-arrow:hover { background: var(--surface-2) }
+.rail-arrow:hover { background: color-mix(in srgb, var(--bg) 88%, transparent) }
 .rail-arrow:disabled { opacity: 0 !important; pointer-events: none }
 @media (hover: none) { .rail-arrow { display: none } }
 

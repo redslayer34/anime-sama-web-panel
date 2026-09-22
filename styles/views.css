@@ -4,31 +4,70 @@
    l'inverse.
    ════════════════════════════════════════════════════════════════════ */
 
-/* Centre le contenu sur --maxw tout en gardant un fond pleine largeur,
-   sans conteneur intermédiaire dans le HTML. */
+/* Mise en page pleine largeur. `.app` est un conteneur de requête : `cqw`
+   y mesure la largeur réelle de la page, barre de défilement exclue, ce
+   qui permet au héros et aux rangées de déborder jusqu'aux bords tout en
+   gardant leur contenu aligné sur la colonne centrale.
+   --bleed (en %) sert aux blocs pleine largeur eux-mêmes ; --page-pad (en
+   cqw) sert à en sortir depuis l'intérieur de <main>. Les deux donnent la
+   même valeur. */
 :root {
-  /* `100%` et non `100vw` : `100vw` inclut la largeur de la barre de
-     défilement, ce qui décalerait le contenu des barres de quelques
-     pixels par rapport à la colonne centrale. */
   --bleed: max(var(--gutter), calc((100% - var(--maxw)) / 2 + var(--gutter)));
 }
+.app {
+  display: block;
+  container-type: inline-size;
+  --page-pad: max(var(--gutter), calc((100cqw - var(--maxw)) / 2 + var(--gutter)));
+  --main-pt: var(--sp-7);
+}
 
-/* ════════ Barre haute ════════════════════════════════════════════ */
+/* ════════ En-tête ════════════════════════════════════════════════
+   Une seule barre : marque, navigation, recherche, réglages. Elle est
+   transparente sur le héros de l'accueil et se solidifie dès qu'on
+   défile, ou partout ailleurs.
+
+   Le fond et le flou vivent sur ::before, jamais sur l'en-tête : un
+   backdrop-filter crée un bloc conteneur, et la barre d'onglets mobile
+   (.sidebar, en position fixed, descendante de l'en-tête) se collerait
+   alors à l'en-tête au lieu du bas de l'écran. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: var(--z-nav);
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-6);
   height: var(--topbar-h);
   padding-inline: var(--bleed);
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(18px) saturate(1.4);
+  isolation: isolate;
 }
+.topbar::before,
+.topbar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease);
+}
+.topbar::before {
+  z-index: -1;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 1px 0 var(--line);
+}
+/* Sur le héros : un voile en dégradé suffit à garder les liens lisibles. */
+.topbar::after {
+  z-index: -2;
+  bottom: -48px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .62), rgba(0, 0, 0, 0));
+  opacity: 0;
+}
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar::before { opacity: 0 }
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar::after { opacity: 1 }
+:root[data-theme="light"][data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar { color: #fff }
 
-.brand { display: flex; align-items: center; gap: var(--sp-3); flex: none }
+.brand { display: flex; align-items: center; gap: var(--sp-2); flex: none; color: inherit }
 .brand:hover { color: inherit }
 .brand-mark {
   display: grid;
@@ -38,113 +77,60 @@
   background: var(--accent);
   color: var(--accent-ink);
 }
-.brand-mark svg { width: 16px; height: 16px; fill: currentColor; stroke: none }
-.brand-text { display: flex; flex-direction: column; line-height: 1.05 }
-.brand-text strong {
+.brand-mark svg { width: 15px; height: 15px; fill: currentColor; stroke: none; margin-left: 2px }
+.brand-word {
   font-family: var(--font-display);
-  font-size: var(--fs-md);
+  font-size: var(--fs-lg);
   font-weight: 800;
-  letter-spacing: -.02em;
-}
-.brand-text small {
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--faint);
+  letter-spacing: -.035em;
 }
 
-.quick-search { position: relative; flex: 1 1 auto; max-width: 420px; margin-inline: auto }
-.qs-icon {
-  position: absolute;
-  left: var(--sp-3);
-  top: 50%;
-  transform: translateY(-50%);
-  width: 17px; height: 17px;
-  color: var(--faint);
-  pointer-events: none;
-}
-.quick-search input {
-  height: 36px;
-  padding-left: calc(var(--sp-3) * 2 + 17px);
-  padding-right: var(--sp-8);
-  border-radius: var(--r-full);
-  background: var(--surface-2);
-  border-color: transparent;
-}
-.quick-search input:focus { background: var(--surface-1); border-color: var(--accent-line) }
-.qs-kbd {
-  position: absolute;
-  right: var(--sp-2);
-  top: 50%;
-  transform: translateY(-50%);
-  min-width: 20px;
-  padding: 1px 6px;
-  border-width: 1px;
-  font-size: var(--fs-2xs);
-  color: var(--faint);
-  pointer-events: none;
-}
-
-.topbar-actions { display: flex; align-items: center; gap: var(--sp-1); flex: none; margin-left: auto }
-.topbar-actions .pill { height: 34px }
-
-/* ════════ Navigation ═════════════════════════════════════════════
-   Le nœud <nav class="sidebar"> n'est pas déplacé dans le HTML : sur
-   desktop il devient une rangée d'onglets sous la barre haute, sur
-   mobile la barre d'onglets basse fixe. Le déplacer dans .topbar le
-   placerait à l'intérieur d'un `backdrop-filter`, qui crée un bloc
-   conteneur et décrocherait la barre basse `position: fixed` du bas de
-   l'écran — un bug qu'aucun test ne verrait. */
-.app { display: block }
-
+/* ── Navigation : liens texte sur ordinateur ── */
 .sidebar {
-  position: sticky;
-  top: var(--topbar-h);
-  z-index: calc(var(--z-nav) - 1);
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  align-self: stretch;
   gap: var(--sp-1);
-  height: var(--navbar-h);
-  padding-inline: var(--bleed);
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(18px) saturate(1.4);
-  overflow-x: auto;
-  scrollbar-width: none;
+  min-width: 0;
 }
-.sidebar::-webkit-scrollbar { display: none }
-
 .nav-item {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  height: calc(var(--navbar-h) - 1px);
   padding: 0 var(--sp-3);
   border: none;
   background: transparent;
-  color: var(--muted);
-  font-size: var(--fs-sm);
+  color: color-mix(in srgb, currentColor 70%, transparent);
+  font-size: var(--fs-md);
   font-weight: 600;
   white-space: nowrap;
   transition: color var(--t-fast) var(--ease);
 }
-.nav-item svg { width: 17px; height: 17px }
-.nav-item:hover { color: var(--text) }
+.topbar .nav-item { color: var(--muted) }
+.nav-item svg { display: none; width: 20px; height: 20px }
+.nav-item:hover, .nav-item.is-active { color: var(--text) }
 .nav-item::after {
   content: "";
   position: absolute;
   left: var(--sp-3); right: var(--sp-3);
-  bottom: 0;
+  bottom: 14px;
   height: 2px;
-  border-radius: var(--r-full) var(--r-full) 0 0;
+  border-radius: var(--r-full);
   background: var(--accent);
   transform: scaleX(0);
   transition: transform var(--t) var(--ease);
 }
-.nav-item.is-active { color: var(--text) }
 .nav-item.is-active::after { transform: scaleX(1) }
+/* Le catalogue partage la vue Accueil : c'est l'état de la grille qui
+   décide de l'onglet allumé. */
+:root[data-view="discover"][data-browse="catalogue"] .nav-item[data-nav="discover"] { color: var(--muted) }
+:root[data-view="discover"][data-browse="catalogue"] .nav-item[data-nav="discover"]::after { transform: scaleX(0) }
+:root[data-view="discover"][data-browse="catalogue"] #loadCatalogueBtn { color: var(--text) }
+:root[data-view="discover"][data-browse="catalogue"] #loadCatalogueBtn::after { transform: scaleX(1) }
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar .nav-item { color: rgba(255, 255, 255, .78); text-shadow: 0 1px 8px rgba(0, 0, 0, .5) }
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar .nav-item.is-active,
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar .nav-item:hover { color: #fff }
 
 .nav-count {
   min-width: 18px;
@@ -156,14 +142,85 @@
   font-weight: 700;
   line-height: 18px;
   text-align: center;
+  text-shadow: none;
 }
+
+/* ── Recherche ── */
+.header-search { position: relative; flex: 0 1 320px; margin-left: auto; min-width: 0 }
+.hs-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px; height: 18px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.header-search input {
+  height: 40px;
+  padding-left: 42px;
+  padding-right: var(--sp-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.header-search input::placeholder { color: var(--muted) }
+.header-search input:focus { background: var(--surface-1); border-color: var(--accent-line) }
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .header-search input {
+  background: rgba(0, 0, 0, .35);
+  border-color: rgba(255, 255, 255, .16);
+  color: #fff;
+}
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .header-search input::placeholder,
+:root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .hs-icon { color: rgba(255, 255, 255, .75) }
+.hs-kbd {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 20px;
+  padding: 1px 6px;
+  font-size: var(--fs-2xs);
+  color: var(--faint);
+  pointer-events: none;
+}
+.header-search input:focus ~ .hs-kbd { opacity: 0 }
+
+.topbar-actions { display: flex; align-items: center; gap: var(--sp-2); flex: none }
+.topbar .icon-btn { color: inherit }
+
+/* Pastille d'état : muette tant que tout va bien. */
+.api-pill { height: 34px }
+.api-pill:has(.dot[data-state="online"]),
+.api-pill:has(.dot[data-state="unknown"]) { display: none }
+
+/* « En cours » : revenir au lecteur d'un geste, depuis n'importe où. */
+.now-playing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 36px;
+  max-width: 280px;
+  padding: 0 var(--sp-4) 0 var(--sp-3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  transition: background var(--t-fast) var(--ease);
+}
+.now-playing:hover { background: color-mix(in srgb, var(--accent) 24%, transparent) }
+.now-playing svg { flex: none; width: 13px; height: 13px; fill: currentColor; stroke: none }
+.np-title { min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.np-label::after { content: " ·"; color: var(--faint) }
+:root[data-view="player"] .now-playing { display: none }
 
 /* ════════ Contenu ════════════════════════════════════════════════ */
 main {
   display: block;
-  max-width: var(--maxw);
-  margin-inline: auto;
-  padding: var(--sp-7) var(--gutter) var(--sp-11);
+  padding: var(--main-pt) var(--page-pad) var(--sp-11);
 }
 
 .view { display: none }
@@ -195,103 +252,251 @@ main {
   align-items: center;
   gap: var(--sp-3);
   flex-wrap: wrap;
-  padding: var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface-1);
-  margin-bottom: var(--sp-5);
+  margin-bottom: var(--sp-6);
 }
+.toolbar > .field.grow { max-width: 420px }
+.toolbar > .chip { margin-left: auto }
+
+/* ── Tête des résultats (recherche ou catalogue) ── */
+.browse-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin: var(--sp-2) 0 var(--sp-5);
+}
+.browse-heading { min-width: 0 }
+.browse-title {
+  font-family: var(--font-display);
+  font-size: clamp(var(--fs-xl), 3vw, var(--fs-3xl));
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -.03em;
+  overflow-wrap: anywhere;
+}
+.browse-sub { margin-top: var(--sp-1); color: var(--muted); font-size: var(--fs-sm) }
+:root[data-browse="catalogue"] #searchLimitField,
+:root[data-browse="idle"] #browseHead,
+:root[data-browse="idle"] #discoverToolbar { display: none }
+
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3) }
 
 /* ════════ Accueil : héros + rangées ══════════════════════════════
    L'accueil n'est pas une vue séparée mais l'état au repos de
    « Découvrir » : il occupe la place de l'ancien écran vide et s'efface
-   dès qu'une recherche remplit la grille. Une seule surface, comme sur
-   les vraies plateformes — et le routage n'a pas à changer. */
+   dès qu'une recherche remplit la grille. */
 .home { margin-bottom: var(--sp-9) }
 
+/* Le héros sort de la colonne : bord à bord, et remonté sous l'en-tête
+   transparent. Le texte, lui, reste aligné sur la colonne (--page-pad). */
 .hero {
   position: relative;
-  overflow: hidden;
-  border-radius: var(--r-xl);
-  border: 1px solid var(--line);
-  margin-bottom: var(--sp-9);
   isolation: isolate;
+  overflow: hidden;
+  margin: calc((var(--topbar-h) + var(--main-pt)) * -1) calc(var(--page-pad) * -1) 0;
+  min-height: clamp(460px, 76vh, 780px);
+  display: flex;
+  align-items: flex-end;
+  background: var(--bg);
 }
-/* Le catalogue ne fournit que des affiches 2/3, jamais de panoramique :
-   la même image, floutée et agrandie, fabrique le fond. */
-.hero-bg {
+.hero-bg { position: absolute; inset: 0; z-index: -3 }
+.hero-slide {
   position: absolute;
-  inset: -10%;
-  z-index: -2;
-  background: var(--surface-2) center / cover no-repeat;
-  filter: blur(48px) saturate(1.5);
-  transform: scale(1.15);
-  opacity: .5;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 900ms var(--ease);
 }
+.hero-slide.is-active { opacity: 1 }
+
+/* Le catalogue ne fournit que des affiches 2/3. Floutée et agrandie, la
+   même image fabrique l'ambiance ; nette, recadrée et fondue vers la
+   gauche, elle devient l'art clé. */
+.hero-ambient.poster {
+  position: absolute;
+  inset: -8%;
+  width: auto; height: auto;
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+  filter: blur(64px) saturate(1.6) brightness(.75);
+  opacity: .7;
+}
+.hero-ambient .poster-gen span { display: none }
+.hero-art.poster {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: min(64%, 1100px);
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%), linear-gradient(0deg, transparent 0%, #000 30%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 38%), linear-gradient(0deg, transparent 0%, #000 30%);
+  mask-composite: intersect;
+}
+.hero-art .poster-img { object-position: center 22% }
+.hero-slide.is-active .hero-art .poster-img { animation: hero-drift 18s linear both }
+.hero-art .poster-gen { align-items: flex-end; justify-content: flex-end; padding: var(--sp-9) var(--page-pad) }
+.hero-art .poster-gen span { font-size: var(--fs-4xl); opacity: .35; text-align: right }
+
 .hero-tint {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: -2;
   background:
-    linear-gradient(105deg, var(--bg) 4%, color-mix(in srgb, var(--bg) 72%, transparent) 46%, transparent 78%),
-    linear-gradient(0deg, var(--bg) 2%, transparent 52%),
-    linear-gradient(135deg, var(--hero-tint, transparent) 0%, transparent 60%);
+    linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 78%, transparent) 30%, transparent 62%),
+    linear-gradient(0deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 40%, transparent) 26%, transparent 55%),
+    linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, transparent 22%),
+    radial-gradient(80% 90% at 0% 100%, var(--hero-tint, transparent) 0%, transparent 70%);
 }
+:root[data-theme="light"] .hero-tint {
+  background:
+    linear-gradient(90deg, rgba(8, 10, 14, .92) 0%, rgba(8, 10, 14, .6) 34%, transparent 64%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 24%),
+    linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, transparent 22%);
+}
+:root[data-theme="light"] .hero-body { color: #fff }
+:root[data-theme="light"] .hero-sub { color: rgba(255, 255, 255, .8) }
+
 .hero-inner {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--sp-7);
-  padding: var(--sp-9) var(--sp-8);
-  min-height: 340px;
+  position: relative;
+  width: 100%;
+  padding: calc(var(--topbar-h) + var(--sp-9)) var(--page-pad) clamp(var(--sp-9), 11vh, 120px);
 }
-.hero-poster { flex: none; width: clamp(120px, 16vw, 186px) }
-.hero-poster .poster { box-shadow: var(--shadow-3) }
-.hero-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3) }
+.hero-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  max-width: min(640px, 52%);
+}
+.hero-body.is-entering > * { animation: fade-up 520ms var(--ease) both }
+.hero-body.is-entering > :nth-child(2) { animation-delay: 40ms }
+.hero-body.is-entering > :nth-child(3) { animation-delay: 80ms }
+.hero-body.is-entering > :nth-child(4) { animation-delay: 110ms }
+.hero-body.is-entering > :nth-child(5) { animation-delay: 140ms }
+
 .hero-eyebrow {
-  font-size: var(--fs-2xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: .16em;
   text-transform: uppercase;
-  color: var(--accent-text);
+  color: var(--accent);
+}
+.hero-eyebrow::before {
+  content: "";
+  width: 18px; height: 2px;
+  border-radius: var(--r-full);
+  background: currentColor;
 }
 .hero-title {
   font-family: var(--font-display);
-  font-size: clamp(var(--fs-2xl), 5vw, var(--fs-4xl));
+  font-size: clamp(38px, 5.6vw, 76px);
   font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -.035em;
+  line-height: 1;
+  letter-spacing: -.04em;
+  text-wrap: balance;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, .35);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .hero-sub {
-  font-size: var(--fs-base);
-  color: var(--muted);
-  max-width: 60ch;
+  font-size: var(--fs-lg);
+  color: color-mix(in srgb, var(--text) 82%, transparent);
+  max-width: 56ch;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.hero-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) }
-.hero-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2) }
-.hero-actions .btn { height: 44px; padding-inline: var(--sp-5) }
+.hero-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--muted) }
+.hero-progress {
+  display: block;
+  width: 160px; height: 4px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .22);
+  overflow: hidden;
+}
+.hero-progress > i { display: block; height: 100%; background: var(--accent) }
+.hero-left { color: var(--text); font-weight: 600 }
+.hero-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-3) }
+
+/* Points du carrousel : celui qui est actif se remplit pendant la durée
+   d'affichage, comme une barre de progression. */
+.hero-dots {
+  position: absolute;
+  right: var(--page-pad);
+  bottom: clamp(var(--sp-9), 11vh, 120px);
+  display: flex;
+  gap: var(--sp-2);
+}
+.hero-dot {
+  position: relative;
+  width: 28px; height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.hero-dot > i {
+  position: absolute;
+  left: 0; right: 0; top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .28);
+  overflow: hidden;
+  transition: background var(--t) var(--ease);
+}
+.hero-dot:hover > i { background: rgba(255, 255, 255, .5) }
+.hero-dot.is-active { width: 44px }
+.hero-dot.is-active > i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  transform-origin: left;
+}
+.hero-dots.is-running .hero-dot.is-active > i::after { animation: dot-fill var(--hero-delay, 9s) linear both }
+.hero-dots.is-paused .hero-dot.is-active > i::after { animation-play-state: paused }
+@keyframes dot-fill { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+@keyframes hero-drift { from { transform: scale(1.06) } to { transform: scale(1) } }
+
+/* Les rangées remontent sur le bas du héros, comme sur les plateformes. */
+#homeRails { position: relative; margin-top: calc(var(--sp-9) * -1) }
 
 .rail-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
   margin-bottom: var(--sp-3);
 }
 .rail-head h2 {
   font-family: var(--font-display);
-  font-size: var(--fs-lg);
+  font-size: clamp(var(--fs-lg), 1.6vw, var(--fs-xl));
   font-weight: 700;
   letter-spacing: -.02em;
 }
-.rail-head .hint { font-size: var(--fs-xs) }
+.rail-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  transition: color var(--t-fast) var(--ease), gap var(--t) var(--ease);
+}
+.rail-more svg { width: 15px; height: 15px }
+.rail-more:hover { color: var(--accent-text); gap: 6px }
 .rail-section { margin-bottom: var(--sp-8) }
 
 /* ════════ Lecteur ════════════════════════════════════════════════ */
@@ -543,6 +748,14 @@ main {
 /* ════════ Responsive ═════════════════════════════════════════════
    Quatre seuils seulement, et une logique unique (desktop d'abord).
    ════════════════════════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  .topbar { gap: var(--sp-4) }
+  .nav-item { padding-inline: var(--sp-2) }
+  .nav-item::after { left: var(--sp-2); right: var(--sp-2) }
+  .header-search { flex-basis: 220px }
+  .np-label { display: none }
+}
+
 @media (max-width: 1180px) {
   .player-layout { grid-template-columns: minmax(0, 1fr) 300px }
   .scan-layout { grid-template-columns: 240px minmax(0, 1fr) }
@@ -553,54 +766,79 @@ main {
   .side-block.grow .episode-list { max-height: 360px }
   .scan-chapters { position: static; max-height: none }
   .scan-chapters .chapter-list { max-height: 260px }
-  .hero-inner { padding: var(--sp-7) var(--sp-6); gap: var(--sp-5) }
+  .hero-body { max-width: min(640px, 70%) }
 }
 
 /* ── Sous ce seuil, la navigation passe en barre d'onglets basse. ──
    Une suite vérifie en 390 px que `.sidebar` est bien `position: fixed`. */
 @media (max-width: 860px) {
+  .topbar { gap: var(--sp-3) }
+  .header-search { flex: 1 1 auto; margin-left: 0 }
   .sidebar {
     position: fixed;
     inset: auto 0 0 0;
-    top: auto;
     z-index: var(--z-nav);
-    height: auto;
+    align-self: auto;
     justify-content: space-around;
     gap: 0;
     padding: var(--sp-1) var(--sp-2) calc(var(--sp-1) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
-    border-bottom: none;
-    background: color-mix(in srgb, var(--bg) 94%, transparent);
-    overflow: visible;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
   }
-  .nav-item {
+  .topbar .nav-item,
+  :root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar .nav-item {
+    flex: 1 1 0;
     flex-direction: column;
-    gap: 2px;
-    height: auto;
-    padding: var(--sp-2) var(--sp-1);
+    justify-content: center;
+    gap: 3px;
+    padding: var(--sp-2) 0;
+    color: var(--faint);
     font-size: var(--fs-2xs);
-    letter-spacing: -.01em;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-shadow: none;
   }
-  .nav-item svg { width: 20px; height: 20px }
-  .nav-item::after { top: 0; bottom: auto; left: 30%; right: 30% }
-  .nav-count { position: absolute; top: 2px; right: 50%; transform: translateX(18px) }
+  .topbar .nav-item.is-active,
+  :root[data-view="discover"][data-browse="idle"]:not([data-scrolled]) .topbar .nav-item.is-active { color: var(--text) }
+  .nav-item svg { display: block }
+  .nav-item::after { top: 0; bottom: auto; left: 34%; right: 34% }
+  .nav-count { position: absolute; top: 4px; left: 50%; transform: translateX(6px) }
 
-  main { padding: var(--sp-5) var(--gutter) calc(var(--sp-11) + 56px) }
+  .app { --main-pt: var(--sp-5) }
+
+  /* Héros en portrait : l'affiche occupe toute la largeur, le texte se
+     pose dessus, en bas. */
+  .hero { min-height: clamp(540px, 86vh, 720px) }
+  .hero-art.poster {
+    width: 100%;
+    -webkit-mask-image: linear-gradient(0deg, transparent 8%, #000 60%);
+    mask-image: linear-gradient(0deg, transparent 8%, #000 60%);
+  }
+  .hero-tint {
+    background:
+      linear-gradient(0deg, var(--bg) 4%, color-mix(in srgb, var(--bg) 72%, transparent) 36%, transparent 68%),
+      linear-gradient(180deg, rgba(0, 0, 0, .4) 0%, transparent 20%);
+  }
+  .hero-body { max-width: 100% }
+  .hero-inner { padding-bottom: var(--sp-9) }
+  .hero-dots { position: static; margin-top: var(--sp-5) }
+  main { padding-bottom: calc(var(--sp-11) + 64px) }
   .toasts { right: var(--sp-3); left: var(--sp-3); width: auto; bottom: calc(var(--sp-4) + 68px) }
   .scan-toolbar, .scan-chapters { position: static }
 }
 
 @media (max-width: 680px) {
-  .brand-text { display: none }
-  .qs-kbd { display: none }
+  .brand-word, .hs-kbd, .np-label, .np-title { display: none }
   .topbar { gap: var(--sp-2) }
-  .quick-search { max-width: none }
+  .now-playing { width: 36px; padding: 0; justify-content: center }
   .topbar-actions .pill { width: 34px; padding: 0; justify-content: center }
   .topbar-actions .pill span:not(.dot) { display: none }
 
-  .hero-inner { flex-direction: column; align-items: flex-start; min-height: 0; padding: var(--sp-6) var(--sp-5) }
-  .hero-poster { width: 108px }
-  .hero-actions .btn { flex: 1 1 auto }
+  .hero-actions { width: 100%; gap: var(--sp-2) }
+  .hero-actions .btn-primary { flex: 1 1 auto }
+  .hero-sub { font-size: var(--fs-base) }
 
   .searchbar { flex-wrap: wrap }
   .searchbar .btn { flex: 1 1 100% }

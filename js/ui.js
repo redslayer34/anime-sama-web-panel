@@ -1,6 +1,7 @@
 /* Anime-Sama Panel — Notifications, modales et navigation entre les vues. */
 import { $, $$, clear, el, icon, must, VIEWS } from "./core.js";
 import { state } from "./store.js";
+import { goHome } from "./discover.js";
 
 const toastHost = $("#toasts");
 const TOAST_ICONS = { info: "info", success: "check", warn: "alert", error: "alert" };
@@ -73,6 +74,8 @@ export function confirmDialog({ title, message, confirmLabel = "Confirmer", dang
 
 export function applyView(view) {
   const target = VIEWS.includes(view) ? view : "discover";
+  // Lu par le CSS : l'en-tête se fait transparent sur le héros de l'accueil.
+  document.documentElement.dataset.view = target;
   for (const section of $$(".view")) section.classList.toggle("is-active", section.dataset.view === target);
   for (const button of $$(".nav-item")) {
     const active = button.dataset.nav === target;
@@ -99,6 +102,24 @@ export function wire() {
     const trigger = event.target.closest("[data-nav]");
     if (!trigger) return;
     event.preventDefault();
+    // Comme un onglet d'application : revenir sur Accueil depuis une autre
+    // vue retrouve la page telle qu'on l'a laissée ; toucher Accueil quand on
+    // y est déjà ramène à l'accueil lui-même.
+    if (trigger.dataset.nav === "discover" && document.documentElement.dataset.view === "discover") {
+      goHome();
+      return;
+    }
     navigate(trigger.dataset.nav);
   });
+
+  // L'en-tête, transparent sur le héros, se solidifie dès qu'on défile.
+  let ticking = false;
+  const syncScroll = () => {
+    ticking = false;
+    document.documentElement.toggleAttribute("data-scrolled", window.scrollY > 24);
+  };
+  window.addEventListener("scroll", () => {
+    if (!ticking) { ticking = true; requestAnimationFrame(syncScroll); }
+  }, { passive: true });
+  syncScroll();
 }

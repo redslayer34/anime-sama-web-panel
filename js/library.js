@@ -1,5 +1,5 @@
 /* Anime-Sama Panel — Favoris, reprise et historique. */
-import { $, clamp, clear, el, formatTime, HISTORY_MAX, icon, must, relTime } from "./core.js";
+import { $, clamp, clear, el, HISTORY_MAX, icon, must, relTime } from "./core.js";
 import { posterBox } from "./covers.js";
 import { cryptoId, persist, state } from "./store.js";
 import { confirmDialog, navigate, notify } from "./ui.js";
@@ -68,6 +68,42 @@ export function renderFavorites() {
   favoritesGrid.append(fragment);
 }
 
+/** Carte « Reprendre » : vignette paysage, épisode et temps restant. Un
+    clic n'importe où sur l'image relance la lecture à la seconde près. */
+export function continueCard(entry) {
+  const saved = entry.episodes?.[entry.lastEpisode];
+  const ratio = saved?.d ? clamp(saved.t / saved.d, 0, 1) : 0;
+  const left = saved?.d && !saved.done ? Math.max(1, Math.round((saved.d - saved.t) / 60)) : null;
+  const resume = () => resumeFrom(
+    { ...entry, episode: entry.lastEpisode },
+    { seek: saved?.done ? null : saved?.t ?? null });
+
+  const thumb = posterBox(animeFromProgress(entry), {
+    className: "poster-wide",
+    extra: [
+      el("button", { type: "button", class: "card-hit", tabindex: "-1", "aria-hidden": "true", onclick: resume }),
+      el("div", { class: "poster-scrim", "aria-hidden": "true" }),
+      el("button", {
+        type: "button", class: "btn btn-primary play-fab",
+        title: "Reprendre", "aria-label": `Reprendre ${entry.title}, épisode ${entry.lastEpisode}`,
+        onclick: resume,
+      }, icon("play")),
+      el("span", { class: "poster-tag", text: `É${entry.lastEpisode}` }),
+      el("div", { class: "poster-bar" }, el("i", { style: { width: `${Math.max(ratio, .02) * 100}%` } })),
+    ],
+  });
+
+  return el("article", { class: "card wide-card", dataset: { id: entry.animeId } }, [
+    thumb,
+    el("h3", { class: "card-title", text: entry.title }),
+    el("p", { class: "card-sub" }, [
+      el("span", { text: `${entry.seasonLabel} · Épisode ${entry.lastEpisode}` }),
+      left ? el("span", { class: "card-sub-accent", text: ` · ${left} min restantes` }) : null,
+      el("span", { text: ` · ${relTime(entry.updatedAt)}` }),
+    ]),
+  ]);
+}
+
 export function renderContinue() {
   clear(continueGrid);
   const entries = Object.values(state.progress)
@@ -79,35 +115,7 @@ export function renderContinue() {
   if (!entries.length) return;
 
   const fragment = document.createDocumentFragment();
-  for (const entry of entries) {
-    const saved = entry.episodes?.[entry.lastEpisode];
-    const ratio = saved?.d ? clamp(saved.t / saved.d, 0, 1) : 0;
-    const resume = () => resumeFrom(
-      { ...entry, episode: entry.lastEpisode },
-      { seek: saved?.done ? null : saved?.t ?? null });
-
-    const poster = posterBox(animeFromProgress(entry), {
-      extra: [
-        el("div", { class: "poster-scrim", "aria-hidden": "true" }),
-        el("div", { class: "poster-actions" }, el("button", {
-          type: "button", class: "btn btn-primary btn-sm btn-icon",
-          title: "Reprendre", "aria-label": `Reprendre ${entry.title}`,
-          onclick: resume,
-        }, icon("play"))),
-        el("div", { class: "poster-bar" }, el("i", { style: { width: `${Math.max(ratio, .02) * 100}%` } })),
-      ],
-    });
-
-    fragment.append(el("article", { class: "card", dataset: { id: entry.animeId } }, [
-      poster,
-      el("h3", { class: "card-title", text: entry.title }),
-      el("p", { class: "card-sub", text: `${entry.seasonLabel} · Ép. ${entry.lastEpisode} · ${String(entry.version).toUpperCase()}` }),
-      el("div", { class: "card-meta" }, [
-        el("span", { class: "chip chip-sm", text: relTime(entry.updatedAt) }),
-        saved?.t ? el("span", { class: "chip chip-sm chip-accent", text: formatTime(saved.t) }) : null,
-      ]),
-    ]));
-  }
+  for (const entry of entries) fragment.append(continueCard(entry));
   continueGrid.append(fragment);
 }
 

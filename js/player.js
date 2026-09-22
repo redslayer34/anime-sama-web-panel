@@ -82,6 +82,12 @@ export function updatePlayerHeader() {
   if (source.isDemo) parts.push("MODE DÉMO");
   nowMeta.textContent = parts.join(" · ") || "—";
   favCurrentBtn.hidden = false;
+  const nowPlaying = must("#nowPlayingBtn");
+  must("#nowPlayingTitle").textContent = player.episode
+    ? `${player.anime.title} · É${player.episode.number}`
+    : player.anime.title;
+  nowPlaying.title = `Revenir au lecteur : ${player.anime.title}`;
+  nowPlaying.hidden = false;
   updatePlayerFavButton();
 }
 

@@ -163,7 +163,7 @@ const errors = [];
   ck("touche 2 → lecteur", await page.isVisible("#view-player"));
   await page.keyboard.press("/");
   await page.waitForTimeout(200);
-  ck("touche / → recherche rapide", await page.evaluate(() => document.activeElement.id) === "quickSearchInput");
+  ck("touche / → recherche de l'en-tête", await page.evaluate(() => document.activeElement.id) === "searchInput");
   await page.keyboard.press("Escape");
 
   console.log("\n— Captures —");

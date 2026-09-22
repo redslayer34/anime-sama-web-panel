@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" data-theme="dark" data-accent="ember">
+<html lang="fr" data-theme="dark" data-accent="ember" data-view="discover" data-browse="idle">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -89,50 +89,58 @@
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 19V8"/><path d="M8 12l4-4 4 4"/><path d="M5 20h14"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5"/><path d="M20 15v5h-5"/><path d="M15 4h5v5"/><path d="M9 20H4v-5"/></symbol>
   <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v6M15 3v6"/><path d="M6 9h12v3a6 6 0 01-12 0z"/><path d="M12 18v3"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-4.5v-6h-5v6H5a1 1 0 01-1-1z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 000 18h1.5a2 2 0 001.6-3.2 2 2 0 011.6-3.2H19a2 2 0 002-2.2A9 9 0 0012 3z"/><circle cx="7.5" cy="12" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="14.5" cy="7.5" r="1"/></symbol>
 </svg>
 
 <a class="skip-link" href="#main">Aller au contenu</a>
 
-<header class="topbar">
-  <a class="brand" href="#discover" data-nav="discover">
+<!-- En-tête unique, à la manière des plateformes : marque, navigation,
+     recherche, puis les réglages. La barre d'onglets (.sidebar) vit dans
+     l'en-tête sur ordinateur et se fixe en bas de l'écran sur mobile ; pour
+     que ce `position: fixed` reste relatif à l'écran, l'en-tête ne porte
+     aucun backdrop-filter (le flou est sur un pseudo-élément). -->
+<header class="topbar" id="topbar">
+  <a class="brand" href="#discover" data-nav="discover" aria-label="Anime-Sama — accueil">
     <span class="brand-mark" aria-hidden="true"><svg><use href="#i-play"/></svg></span>
-    <span class="brand-text">
-      <strong>Anime-Sama</strong>
-      <small>Panel</small>
-    </span>
+    <span class="brand-word">Anime-Sama</span>
   </a>
 
-  <form class="quick-search" id="quickSearchForm" role="search">
-    <svg class="qs-icon" aria-hidden="true"><use href="#i-search"/></svg>
-    <input id="quickSearchInput" type="search" placeholder="Rechercher un anime…" aria-label="Rechercher un anime" autocomplete="off" spellcheck="false">
-    <kbd class="qs-kbd" aria-hidden="true">/</kbd>
+  <nav class="sidebar" aria-label="Navigation principale">
+    <button type="button" class="nav-item is-active" data-nav="discover"><svg aria-hidden="true"><use href="#i-home"/></svg><span>Accueil</span></button>
+    <button type="button" class="nav-item" id="loadCatalogueBtn"><svg aria-hidden="true"><use href="#i-grid"/></svg><span>Catalogue</span></button>
+    <button type="button" class="nav-item" data-nav="favorites"><svg aria-hidden="true"><use href="#i-star"/></svg><span>Ma liste</span><span class="nav-count" id="navFavCount" hidden>0</span></button>
+    <button type="button" class="nav-item" data-nav="history"><svg aria-hidden="true"><use href="#i-clock"/></svg><span>Historique</span></button>
+    <button type="button" class="nav-item" data-nav="scans"><svg aria-hidden="true"><use href="#i-book"/></svg><span>Scans</span></button>
+  </nav>
+
+  <form class="header-search" id="searchForm" role="search">
+    <svg class="hs-icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <input id="searchInput" type="search" placeholder="Rechercher un anime" aria-label="Rechercher un anime" autocomplete="off" spellcheck="false" enterkeyhint="search">
+    <kbd class="hs-kbd" aria-hidden="true">/</kbd>
   </form>
 
   <div class="topbar-actions">
-    <button type="button" class="pill" id="apiStatusBtn" title="État de la connexion à l'API" aria-live="polite">
+    <button type="button" class="now-playing" id="nowPlayingBtn" data-nav="player" hidden>
+      <svg aria-hidden="true"><use href="#i-play"/></svg>
+      <span class="np-label">En cours</span>
+      <span class="np-title" id="nowPlayingTitle"></span>
+    </button>
+    <!-- Ne s'affiche que lorsqu'il y a quelque chose à signaler : hors ligne,
+         indexation en cours, mode démo. Une connexion saine ne se montre pas. -->
+    <button type="button" class="pill api-pill" id="apiStatusBtn" title="État de la connexion à l'API" aria-live="polite">
       <span class="dot" id="apiStatusDot" data-state="unknown"></span>
       <span id="apiStatusLabel">API&nbsp;?</span>
     </button>
-    <button type="button" class="icon-btn" id="themeBtn" title="Changer de thème" aria-label="Changer de thème">
-      <svg aria-hidden="true"><use href="#i-palette"/></svg>
-    </button>
-    <button type="button" class="icon-btn" data-nav="settings" title="Paramètres" aria-label="Paramètres">
+    <button type="button" class="icon-btn" data-nav="settings" title="Réglages" aria-label="Réglages">
       <svg aria-hidden="true"><use href="#i-settings"/></svg>
     </button>
   </div>
 </header>
 
 <div class="app">
-  <nav class="sidebar" aria-label="Navigation principale">
-    <button type="button" class="nav-item is-active" data-nav="discover"><svg aria-hidden="true"><use href="#i-compass"/></svg><span>Accueil</span></button>
-    <button type="button" class="nav-item" data-nav="player"><svg aria-hidden="true"><use href="#i-play"/></svg><span>Lecteur</span></button>
-    <button type="button" class="nav-item" data-nav="favorites"><svg aria-hidden="true"><use href="#i-star"/></svg><span>Ma liste</span><span class="nav-count" id="navFavCount" hidden>0</span></button>
-    <button type="button" class="nav-item" data-nav="history"><svg aria-hidden="true"><use href="#i-clock"/></svg><span>Historique</span></button>
-    <button type="button" class="nav-item" data-nav="scans"><svg aria-hidden="true"><use href="#i-book"/></svg><span>Scans</span></button>
-    <button type="button" class="nav-item" data-nav="settings"><svg aria-hidden="true"><use href="#i-settings"/></svg><span>Réglages</span></button>
-  </nav>
-
   <main id="main" tabindex="-1">
 
     <!-- ══════════════════ DÉCOUVRIR ══════════════════ -->
@@ -143,56 +151,40 @@
            celle-ci. Le héros et les rangées occupent la place de l'ancien
            écran vide, et s'effacent dès qu'une recherche remplit la grille. -->
       <div class="home" id="homeBlock" hidden>
-        <section class="hero" id="hero" aria-labelledby="heroTitle" hidden>
+        <!-- Héros en carrousel : jusqu'à cinq titres (reprises, Ma liste, puis
+             une sélection du jour). L'affiche sert d'art clé à droite et,
+             floutée, de fond ; le texte vit à gauche, sur un dégradé. -->
+        <section class="hero" id="hero" aria-roledescription="carrousel" aria-labelledby="heroTitle" hidden>
           <div class="hero-bg" id="heroBg" aria-hidden="true"></div>
           <div class="hero-tint" aria-hidden="true"></div>
           <div class="hero-inner">
-            <div class="hero-poster" id="heroPoster" aria-hidden="true"></div>
-            <div class="hero-body">
+            <div class="hero-body" id="heroBody">
               <p class="hero-eyebrow" id="heroEyebrow">À la une</p>
               <h2 class="hero-title" id="heroTitle">—</h2>
               <p class="hero-sub" id="heroSub"></p>
               <div class="hero-meta" id="heroMeta"></div>
               <div class="hero-actions" id="heroActions"></div>
             </div>
+            <div class="hero-dots" id="heroDots" aria-label="Titres à la une"></div>
           </div>
         </section>
         <div id="homeRails"></div>
       </div>
 
-      <div class="view-head">
-        <div>
-          <h2 class="section-title" id="catalogueTitle">Catalogue</h2>
-          <p class="view-sub">Recherche floue côté API, ou filtrage instantané du catalogue complet mis en cache.</p>
+      <!-- Tête des résultats : masquée sur l'accueil, elle titre une
+           recherche ou le catalogue et offre le retour à l'accueil. -->
+      <div class="browse-head" id="browseHead">
+        <div class="browse-heading">
+          <h2 class="browse-title" id="catalogueTitle">Catalogue</h2>
+          <p class="browse-sub" id="browseSub"></p>
         </div>
-        <div class="view-actions">
-          <button type="button" class="btn btn-ghost" id="loadCatalogueBtn">
-            <svg aria-hidden="true"><use href="#i-download"/></svg><span>Catalogue complet</span>
-          </button>
-        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="browseHomeBtn"><svg aria-hidden="true"><use href="#i-prev"/></svg><span>Accueil</span></button>
       </div>
-
-      <form class="searchbar" id="searchForm" role="search">
-        <div class="field grow">
-          <svg class="field-icon" aria-hidden="true"><use href="#i-search"/></svg>
-          <input id="searchInput" type="search" placeholder="Ex. One Piece, Frieren, Demon Slayer…" aria-label="Nom de l'anime" autocomplete="off" spellcheck="false">
-        </div>
-        <div class="field">
-          <label class="sr-only" for="searchLimit">Nombre de résultats</label>
-          <select id="searchLimit">
-            <option value="5">5 résultats</option>
-            <option value="10" selected>10 résultats</option>
-            <option value="20">20 résultats</option>
-            <option value="40">40 résultats</option>
-          </select>
-        </div>
-        <button type="submit" class="btn btn-primary" id="searchBtn">Rechercher</button>
-      </form>
 
       <div class="toolbar" id="discoverToolbar">
         <div class="field grow">
           <svg class="field-icon" aria-hidden="true"><use href="#i-search"/></svg>
-          <input id="filterInput" type="search" placeholder="Filtrer la liste affichée…" aria-label="Filtrer les résultats" autocomplete="off">
+          <input id="filterInput" type="search" placeholder="Filtrer ces titres…" aria-label="Filtrer les résultats" autocomplete="off">
         </div>
         <div class="field">
           <label class="sr-only" for="sortSelect">Trier</label>
@@ -200,13 +192,22 @@
             <option value="relevance">Pertinence</option>
             <option value="az">Titre A → Z</option>
             <option value="za">Titre Z → A</option>
-            <option value="fav">Favoris d'abord</option>
+            <option value="fav">Ma liste d'abord</option>
+          </select>
+        </div>
+        <div class="field" id="searchLimitField">
+          <label class="sr-only" for="searchLimit">Résultats par recherche</label>
+          <select id="searchLimit" title="Résultats par recherche">
+            <option value="5">5 résultats</option>
+            <option value="10" selected>10 résultats</option>
+            <option value="20">20 résultats</option>
+            <option value="40">40 résultats</option>
           </select>
         </div>
         <label class="switch">
           <input type="checkbox" id="favOnlyToggle">
           <span class="switch-track" aria-hidden="true"></span>
-          <span>Favoris uniquement</span>
+          <span>Ma liste uniquement</span>
         </label>
         <span class="chip" id="resultCount" aria-live="polite">—</span>
       </div>
@@ -352,7 +353,7 @@
       </div>
 
       <h2 class="section-title" id="continueTitle" hidden>Reprendre la lecture</h2>
-      <div class="card-grid" id="continueGrid"></div>
+      <div class="card-grid card-grid-wide" id="continueGrid"></div>
 
       <h2 class="section-title">Lectures récentes</h2>
       <div class="list" id="historyList"></div>
@@ -421,7 +422,10 @@
         </section>
 
         <section class="panel">
-          <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-palette"/></svg> Apparence</h2>
+          <div class="panel-head">
+            <h2 class="panel-title"><svg aria-hidden="true"><use href="#i-palette"/></svg> Apparence</h2>
+            <button type="button" class="btn btn-ghost btn-sm" id="themeBtn" title="Passer au thème suivant"><svg aria-hidden="true"><use href="#i-refresh"/></svg><span>Thème suivant</span></button>
+          </div>
           <div class="field-group">
             <label for="themeSelect">Thème</label>
             <select id="themeSelect">

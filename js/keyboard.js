@@ -23,8 +23,8 @@ export function wire() {
 
     if (event.key === "/" && !isTyping(event.target)) {
       event.preventDefault();
-      $("#quickSearchInput").focus();
-      $("#quickSearchInput").select();
+      $("#searchInput").focus();
+      $("#searchInput").select();
       return;
     }
     if (isTyping(event.target) || modal.open) return;

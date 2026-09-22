@@ -92,9 +92,8 @@
   --t-slow: 340ms;
 
   /* ── Mesures de mise en page ─────────────────────────────────────── */
-  --topbar-h: 58px;
-  --navbar-h: 46px;
-  --header-h: calc(var(--topbar-h) + var(--navbar-h));
+  --topbar-h: 64px;
+  --header-h: var(--topbar-h);
   --maxw: 1600px;
   --gutter: clamp(16px, 3vw, 48px);
   --poster-r: var(--r-md);
