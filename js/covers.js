@@ -51,9 +51,19 @@ export function rememberCover(anime) {
   persist();
 }
 
+/** Jaquettes du catalogue connues en mémoire (cache navigateur, catalogue
+    complet, résultats de recherche). Sans elle, une série lancée avant
+    l'existence des jaquettes — ou reprise depuis l'historique — n'aurait
+    jamais d'image, alors que le catalogue la possède. */
+const coverIndex = new Map();
+export function indexCovers(items) {
+  for (const item of items || []) if (item?.id && item.cover) coverIndex.set(item.id, item.cover);
+}
+export function knownCover(id) { return coverIndex.get(id) || null; }
+
 export function coverFor(anime) {
   if (!anime) return null;
-  return anime.cover || state.covers[anime.id] || null;
+  return anime.cover || state.covers[anime.id] || coverIndex.get(anime.id) || null;
 }
 
 /** Remplace l'image par l'affiche dessinée, sans jamais laisser une image

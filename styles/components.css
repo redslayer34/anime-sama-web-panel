@@ -473,8 +473,17 @@ fieldset.field-group > legend {
 }
 
 /* ── Carte large « Reprendre » : vignette paysage ── */
-.poster-wide { aspect-ratio: 16 / 9 }
-.poster-wide .poster-img { object-position: center 24% }
+.poster-wide { aspect-ratio: 16 / 9; isolation: isolate }
+.poster-wide > .poster-img { position: relative; z-index: 1; object-fit: contain; object-position: center; background: transparent }
+.poster-ambient.poster {
+  position: absolute; inset: -12%;
+  width: auto; height: auto; aspect-ratio: auto;
+  border-radius: 0; box-shadow: none;
+  filter: blur(26px) brightness(.72) saturate(1.5);
+}
+.poster-ambient .poster-gen span { display: none }
+.wide-card .poster-tag { top: var(--sp-2); bottom: auto }
+.wide-card .poster-gen { z-index: 1 }
 .poster-wide .poster-gen { align-items: flex-end }
 .wide-card .poster-scrim { background: linear-gradient(0deg, rgba(0, 0, 0, .55) 0%, transparent 55%) }
 .wide-card .play-fab { width: 48px; height: 48px; margin: -24px 0 0 -24px }
@@ -933,18 +942,15 @@ fieldset.field-group > legend {
 .detail-hero .hero-ambient { z-index: -3 }
 .detail-art.poster {
   position: absolute;
-  top: 0; right: 0; bottom: 0;
+  top: var(--sp-6); right: var(--sp-7); bottom: var(--sp-6);
   z-index: -2;
-  width: 64%;
-  height: 100%;
-  aspect-ratio: auto;
-  border-radius: 0;
-  box-shadow: none;
+  height: auto; width: auto;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--r-md);
+  box-shadow: 0 30px 70px -18px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .08);
   background: transparent;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 42%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 42%);
 }
-.detail-art .poster-img { object-position: center 22% }
+.detail-art .poster-img { image-rendering: auto }
 .detail-art .poster-gen span { display: none }
 .detail-shade {
   position: absolute;
@@ -1028,11 +1034,7 @@ fieldset.field-group > legend {
 
 @media (max-width: 640px) {
   .detail-hero { min-height: 460px }
-  .detail-art.poster {
-    width: 100%;
-    -webkit-mask-image: linear-gradient(0deg, transparent 10%, #000 62%);
-    mask-image: linear-gradient(0deg, transparent 10%, #000 62%);
-  }
+  .detail-art.poster { left: 50%; right: auto; transform: translateX(-50%); top: var(--sp-8); bottom: auto; height: 52% }
   .detail-shade { background: linear-gradient(0deg, var(--surface-1) 6%, color-mix(in srgb, var(--surface-1) 70%, transparent) 40%, transparent 72%) }
   .detail-head { max-width: 100%; padding: var(--sp-9) var(--sp-5) var(--sp-5) }
   .detail-actions { width: 100% }

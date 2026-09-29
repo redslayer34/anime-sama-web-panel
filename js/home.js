@@ -1,6 +1,6 @@
 /* Anime-Sama Panel — Accueil : héros et rangées, affichés tant qu'aucune recherche n'est lancée. */
 import { clamp, clear, el, icon, must } from "./core.js";
-import { posterBox, titleHue } from "./covers.js";
+import { knownCover, posterBox, rememberCover, titleHue } from "./covers.js";
 import { state } from "./store.js";
 import { navigate } from "./ui.js";
 import { animeCard, discover, isFavorite, showAnimeDetails, toggleFavorite } from "./discover.js";
@@ -40,11 +40,15 @@ function continueEntries(limit = 12) {
 }
 
 export function animeFromProgress(entry) {
-  return {
+  const anime = {
     id: entry.animeId, title: entry.title, alt: "",
     url: entry.animeUrl || null, cover: state.covers[entry.animeId] || null,
     score: null, index: 0,
   };
+  // Lecture antérieure aux jaquettes : le catalogue la connaît, on la retient
+  // pour qu'elle survive à l'expiration du cache.
+  if (!anime.cover && knownCover(anime.id)) { anime.cover = knownCover(anime.id); rememberCover(anime); }
+  return anime;
 }
 
 export function animeFromFavorite(fav) {
@@ -274,8 +278,8 @@ export function renderHome() {
   // la grille : une seule surface à la fois, jamais les deux.
   if (discover.origin !== "idle") { homeBlock.hidden = true; return; }
 
+  const pool = homePool();      // remplit l'index des jaquettes avant toute carte
   const hasHero = renderHero();
-  const pool = homePool();
 
   clear(homeRails);
   const scored = pool.filter((a) => Number.isFinite(a.score)).sort((a, b) => b.score - a.score);

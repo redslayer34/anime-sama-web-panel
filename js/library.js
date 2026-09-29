@@ -1,6 +1,6 @@
 /* Anime-Sama Panel — Favoris, reprise et historique. */
 import { $, clamp, clear, el, HISTORY_MAX, icon, must, relTime } from "./core.js";
-import { posterBox } from "./covers.js";
+import { knownCover, posterBox } from "./covers.js";
 import { cryptoId, persist, state } from "./store.js";
 import { confirmDialog, navigate, notify } from "./ui.js";
 import { animeCard, emptyState, renderDiscover } from "./discover.js";
@@ -35,7 +35,8 @@ export function recordHistory(episodeNumber) {
 
 function resumeFrom(entry, { seek = null } = {}) {
   openAnime(
-    { id: entry.animeId, title: entry.title, url: entry.animeUrl || null },
+    { id: entry.animeId, title: entry.title, url: entry.animeUrl || null,
+      cover: state.covers[entry.animeId] || knownCover(entry.animeId) },
     {
       seasonSlug: entry.seasonSlug,
       seasonLabel: entry.seasonLabel,
@@ -81,6 +82,7 @@ export function continueCard(entry) {
   const thumb = posterBox(animeFromProgress(entry), {
     className: "poster-wide",
     extra: [
+      posterBox(animeFromProgress(entry), { className: "poster-ambient" }),
       el("button", { type: "button", class: "card-hit", tabindex: "-1", "aria-hidden": "true", onclick: resume }),
       el("div", { class: "poster-scrim", "aria-hidden": "true" }),
       el("button", {

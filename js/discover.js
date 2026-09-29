@@ -1,6 +1,6 @@
 /* Anime-Sama Panel — Vue Découvrir : recherche, grille d'affiches, favoris, fiche détail. */
 import { $, $$, clamp, clear, deaccent, debounce, el, icon, must, safeUrl } from "./core.js";
-import { coverFor, posterBox, rememberCover } from "./covers.js";
+import { coverFor, indexCovers, posterBox, rememberCover } from "./covers.js";
 import { persist, state } from "./store.js";
 import { closeModal, navigate, notify, openModal } from "./ui.js";
 import { ApiError, describeError, source } from "./api.js";
@@ -301,6 +301,7 @@ async function runSearch(query) {
   searchInput.blur();
   try {
     const items = await source.search(term, Number($("#searchLimit").value) || 10);
+    indexCovers(items);
     discover.items = items.map((a, i) => ({ ...a, index: i }));
     discover.origin = "results";
     renderDiscover();

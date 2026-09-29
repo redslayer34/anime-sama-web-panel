@@ -1,10 +1,12 @@
 /* Anime-Sama Panel — Catalogue complet : cache navigateur, préchargement, indexation. */
 import { CATALOGUE_KEY, CATALOGUE_MAX, CATALOGUE_TTL, el, must, panelServer } from "./core.js";
 import { safeStorage, state } from "./store.js";
+import { indexCovers } from "./covers.js";
 import { navigate, notify, openModal } from "./ui.js";
 import { ApiError, describeError, request, source } from "./api.js";
 import { discover, renderDiscover } from "./discover.js";
 import { renderHome } from "./home.js";
+import { renderContinue, renderFavorites, renderHistory } from "./library.js";
 import { setApiStatus } from "./settings.js";
 
 /** Réservoir de fiches pour l'accueil : la liste affichée si elle existe,
@@ -19,7 +21,7 @@ export function homePool() {
 function readCatalogueCache() {
   try {
     const raw = JSON.parse(safeStorage.get(CATALOGUE_KEY) || "null");
-    if (raw && Array.isArray(raw.items) && raw.items.length) return raw;
+    if (raw && Array.isArray(raw.items) && raw.items.length) { indexCovers(raw.items); return raw; }
   } catch { /* cache illisible */ }
   return null;
 }
@@ -48,6 +50,7 @@ async function fetchCatalogue() {
 }
 
 function writeCatalogueCache(items) {
+  indexCovers(items);
   const payload = JSON.stringify({ at: Date.now(), items });
   if (payload.length < CATALOGUE_MAX) safeStorage.set(CATALOGUE_KEY, payload);
 }
@@ -72,10 +75,15 @@ export async function warmHomeCatalogue() {
     writeCatalogueCache(items);
     cataloguePool = items;
     if (discover.origin === "idle") renderHome();
+    // Les listes construites au démarrage, avant l'arrivée des jaquettes.
+    renderContinue();
+    renderHistory();
+    renderFavorites();
   } catch { /* silencieux, c'est un confort et non un prérequis */ }
 }
 
 function showCatalogue(items) {
+  indexCovers(items);
   discover.items = items.map((a, i) => ({ ...a, index: i }));
   discover.origin = "results";
   discover.kind = "catalogue";

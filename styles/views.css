@@ -325,24 +325,25 @@ main {
   opacity: .7;
 }
 .hero-ambient .poster-gen span { display: none }
+/* L'affiche est posée à son ratio 2/3, sans être agrandie au-delà de sa
+   hauteur d'affichage : la recadrer en panoramique l'étirait et la rendait
+   floue. L'ambiance floue derrière comble le reste. */
 .hero-art.poster {
   position: absolute;
-  top: 0; right: 0; bottom: 0;
-  width: min(64%, 1100px);
-  height: 100%;
-  aspect-ratio: auto;
-  border-radius: 0;
-  box-shadow: none;
+  right: calc(var(--page-pad) + var(--sp-4));
+  top: calc(var(--topbar-h) + var(--sp-5));
+  bottom: clamp(var(--sp-9), 11vh, 120px);
+  height: auto;
+  width: auto;
+  aspect-ratio: 2 / 3;
+  max-height: 620px;
+  border-radius: var(--r-lg);
+  box-shadow: 0 40px 90px -20px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .08);
   background: transparent;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%), linear-gradient(0deg, transparent 0%, #000 30%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(90deg, transparent 0%, #000 38%), linear-gradient(0deg, transparent 0%, #000 30%);
-  mask-composite: intersect;
 }
-.hero-art .poster-img { object-position: center 22% }
-.hero-slide.is-active .hero-art .poster-img { animation: hero-drift 18s linear both }
-.hero-art .poster-gen { align-items: flex-end; justify-content: flex-end; padding: var(--sp-9) var(--page-pad) }
-.hero-art .poster-gen span { font-size: var(--fs-4xl); opacity: .35; text-align: right }
+.hero-art .poster-img { image-rendering: auto; object-position: center }
+.hero-art .poster-gen { align-items: flex-end; padding: var(--sp-6) }
+.hero-art .poster-gen span { font-size: var(--fs-2xl); opacity: .9 }
 
 .hero-tint {
   position: absolute;
@@ -474,7 +475,6 @@ main {
 .hero-dots.is-running .hero-dot.is-active > i::after { animation: dot-fill var(--hero-delay, 9s) linear both }
 .hero-dots.is-paused .hero-dot.is-active > i::after { animation-play-state: paused }
 @keyframes dot-fill { from { transform: scaleX(0) } to { transform: scaleX(1) } }
-@keyframes hero-drift { from { transform: scale(1.06) } to { transform: scale(1) } }
 
 /* Les rangées remontent sur le bas du héros, comme sur les plateformes. */
 #homeRails { position: relative; margin-top: calc(var(--sp-9) * -1) }
@@ -911,9 +911,12 @@ main {
      pose dessus, en bas. */
   .hero { min-height: clamp(540px, 86vh, 720px) }
   .hero-art.poster {
-    width: 100%;
-    -webkit-mask-image: linear-gradient(0deg, transparent 8%, #000 60%);
-    mask-image: linear-gradient(0deg, transparent 8%, #000 60%);
+    left: 50%; right: auto;
+    transform: translateX(-50%);
+    top: calc(var(--topbar-h) + var(--sp-4));
+    bottom: auto;
+    height: 46%;
+    max-height: none;
   }
   .hero-tint {
     background:
