@@ -325,25 +325,38 @@ main {
   opacity: .7;
 }
 .hero-ambient .poster-gen span { display: none }
-/* L'affiche est posée à son ratio 2/3, sans être agrandie au-delà de sa
-   hauteur d'affichage : la recadrer en panoramique l'étirait et la rendait
-   floue. L'ambiance floue derrière comble le reste. */
+/* Image du héros. Par défaut (et pour un paysage, le cas courant) elle
+   occupe la droite du héros en entier, fondue vers la gauche ; sa largeur
+   est plafonnée à 1,4 × sa résolution native pour ne jamais paraître floue.
+   Une image portrait est, elle, posée à son ratio, comme une affiche. */
 .hero-art.poster {
   position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: min(72%, calc(var(--nat-w, 2400px) * 1.4));
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 34%), linear-gradient(0deg, transparent 0%, #000 26%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 34%), linear-gradient(0deg, transparent 0%, #000 26%);
+  mask-composite: intersect;
+}
+.hero-art .poster-img { image-rendering: auto; object-position: center 24% }
+.hero-art .poster-gen { align-items: flex-end; justify-content: flex-end; padding: var(--sp-9) var(--page-pad) }
+.hero-art .poster-gen span { font-size: var(--fs-4xl); opacity: .35; text-align: right }
+.hero-art.poster[data-shape="portrait"] {
   right: calc(var(--page-pad) + var(--sp-4));
   top: calc(var(--topbar-h) + var(--sp-5));
   bottom: clamp(var(--sp-9), 11vh, 120px);
-  height: auto;
-  width: auto;
+  height: auto; width: auto;
   aspect-ratio: 2 / 3;
   max-height: 620px;
   border-radius: var(--r-lg);
   box-shadow: 0 40px 90px -20px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .08);
-  background: transparent;
+  -webkit-mask-image: none; mask-image: none;
 }
-.hero-art .poster-img { image-rendering: auto; object-position: center }
-.hero-art .poster-gen { align-items: flex-end; padding: var(--sp-6) }
-.hero-art .poster-gen span { font-size: var(--fs-2xl); opacity: .9 }
 
 .hero-tint {
   position: absolute;
@@ -911,12 +924,18 @@ main {
      pose dessus, en bas. */
   .hero { min-height: clamp(540px, 86vh, 720px) }
   .hero-art.poster {
+    width: 100%;
+    height: 62%;
+    bottom: auto;
+    -webkit-mask-image: linear-gradient(0deg, transparent 0%, #000 55%);
+    mask-image: linear-gradient(0deg, transparent 0%, #000 55%);
+  }
+  .hero-art .poster-img { object-position: center 20% }
+  .hero-art.poster[data-shape="portrait"] {
     left: 50%; right: auto;
     transform: translateX(-50%);
     top: calc(var(--topbar-h) + var(--sp-4));
-    bottom: auto;
-    height: 46%;
-    max-height: none;
+    height: 46%; width: auto; max-height: none;
   }
   .hero-tint {
     background:

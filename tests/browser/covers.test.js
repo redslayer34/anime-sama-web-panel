@@ -20,6 +20,7 @@ const entry = (id, title, ep) => ({
     progress: {
       "frieren::saison1::vostfr": entry("frieren", "Frieren", 3),
       "inconnu::saison1::vostfr": entry("inconnu", "Série Inconnue", 2),
+      "demon-slayer::saison1::vostfr": entry("demon-slayer", "Demon Slayer", 5),
     },
   };
   await ctx.addInitScript((s) => {
@@ -46,6 +47,20 @@ const entry = (id, title, ep) => ({
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("animeSamaPanel.v1")).covers || {});
   ck("jaquette mémorisée pour la suite", !!stored.frieren, JSON.stringify(stored));
   ck("rien de mémorisé pour l'inconnue", !stored.inconnu);
+
+  // Forme et résolution natives : le CSS s'appuie dessus pour ne rien couper ni agrandir.
+  await page.waitForSelector(`${card("demon-slayer")} .poster-wide[data-shape]`, { timeout: 8000 }).catch(() => {});
+  const shape = (id) => page.getAttribute(`${card(id)} .poster-wide`, "data-shape");
+  ck("image paysage détectée", (await shape("demon-slayer")) === "landscape");
+  ck("image portrait détectée", (await shape("frieren")) === "portrait");
+  ck("largeur native exposée",
+     (await page.evaluate((sel) => document.querySelector(sel).style.getPropertyValue("--nat-w"), `${card("demon-slayer")} .poster-wide`)) === "800px");
+  const art = await page.evaluate(() => {
+    const el = [...document.querySelectorAll(".hero-art")].find((n) => n.dataset.shape === "landscape");
+    return el ? { w: el.getBoundingClientRect().width, nat: parseFloat(el.style.getPropertyValue("--nat-w")) } : null;
+  });
+  ck("héros paysage : jamais agrandi au-delà de 1,4 × sa résolution native",
+     !art || art.w <= art.nat * 1.4 + 1, art ? `${Math.round(art.w)} px pour ${art.nat} px natifs` : "aucun héros paysage");
 
   await page.click('[data-nav="history"]');
   await page.waitForSelector("#continueGrid .wide-card");

@@ -21,11 +21,12 @@ FIXTURES = STATIC + "/tests/fixtures"
 # image. « Jujutsu Kaisen » reste volontairement sans image pour couvrir
 # aussi l'affiche dessinée de repli.
 COVER = "/tests/fixtures/page{}.svg"
+WIDE = "/tests/fixtures/cover-wide.svg"     # jaquette paysage, comme celles d'Anime-Sama
 
 CATALOGUE = [
     {"title": "One Piece", "AlterTitle": "Wan Pisu", "link": "https://anime-sama.org/catalogue/one-piece/", "cover": COVER.format(1)},
     {"title": "Frieren", "AlterTitle": "Sousou no Frieren", "link": "https://anime-sama.org/catalogue/frieren/", "cover": COVER.format(2)},
-    {"title": "Demon Slayer", "AlterTitle": "Kimetsu no Yaiba", "link": "https://anime-sama.org/catalogue/demon-slayer/", "cover": COVER.format(3)},
+    {"title": "Demon Slayer", "AlterTitle": "Kimetsu no Yaiba", "link": "https://anime-sama.org/catalogue/demon-slayer/", "cover": WIDE},
     {"title": "Jujutsu Kaisen", "AlterTitle": "", "link": "https://anime-sama.org/catalogue/jujutsu-kaisen/"},
     {"title": "Attack on Titan", "AlterTitle": "Shingeki no Kyojin", "link": "https://anime-sama.org/catalogue/attack-on-titan/", "cover": COVER.format(1)},
 ]

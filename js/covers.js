@@ -81,6 +81,19 @@ function paintFallback(box, title) {
   }, el("span", { text: title || "Sans titre" })));
 }
 
+/** Les images d'Anime-Sama sont le plus souvent au format paysage, mais
+    rien ne le garantit. Chaque boîte apprend la forme réelle de son image :
+    le CSS l'affiche alors entière plutôt que recadrée, et ne l'agrandit
+    jamais au-delà de sa résolution native (--nat-w). La copie floue qui
+    comble les marges est la même image, posée en variable. */
+function describeShape(box, img) {
+  const { naturalWidth: w, naturalHeight: h } = img;
+  if (!w || !h) return;
+  box.dataset.shape = w >= h * 1.15 ? "landscape" : "portrait";
+  box.style.setProperty("--nat-w", `${w}px`);
+  box.style.setProperty("--cover-url", `url("${img.currentSrc.replace(/["\\]/g, "\\$&")}")`);
+}
+
 /** Construit la boîte d'affiche : ratio figé, chargement différé, repli
     automatique. `extra` reçoit les surcouches (voile, actions, barre). */
 export function posterBox(anime, { className = "", eager = false, extra = [] } = {}) {
@@ -100,7 +113,9 @@ export function posterBox(anime, { className = "", eager = false, extra = [] } =
         src: first,
         alt: "",
         loading: eager ? "eager" : "lazy",
-        decoding: "async",
+        // La première image du héros ne doit pas apparaître d'abord en basse définition.
+        decoding: eager ? "sync" : "async",
+        fetchpriority: eager ? "high" : null,
         onerror: () => {
           // Première déconvenue : on retente par le serveur, qui ajoute le
           // Referer attendu. Seconde : on dessine.
@@ -114,9 +129,13 @@ export function posterBox(anime, { className = "", eager = false, extra = [] } =
           coverMemo.delete(anime.id);
           paintFallback(box, title);
         },
-        onload: () => { if (anime?.id) coverMemo.set(anime.id, img.src); },
+        onload: () => {
+          if (anime?.id) coverMemo.set(anime.id, img.src);
+          describeShape(box, img);
+        },
       });
       box.append(img);
+      if (img.complete && img.naturalWidth) describeShape(box, img);
     } else {
       paintFallback(box, title);
     }
